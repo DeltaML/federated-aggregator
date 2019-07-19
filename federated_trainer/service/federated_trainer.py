@@ -16,7 +16,7 @@ from copy import deepcopy
 
 
 class GlobalModel:
-    def __init__(self, buyer_id, buyer_host, model_id, public_key, model_type, local_trainers, validators, model):
+    def __init__(self, buyer_id, buyer_host, model_id, model_type, local_trainers, validators, model):
         """
 
         :param buyer_id: String
@@ -31,7 +31,6 @@ class GlobalModel:
         self.buyer_id = buyer_id
         self.model_id = model_id
         self.buyer_host = buyer_host
-        self.public_key = public_key
         self.model_type = model_type
         self.local_trainers = local_trainers
         self.validators = validators
@@ -124,13 +123,14 @@ class FederatedTrainer:
         self.global_models[model_id] = GlobalModel(model_id=model_id,
                                                    buyer_id=data["model_buyer_id"],
                                                    buyer_host=data["remote_address"],
-                                                   public_key=data["public_key"],
                                                    model_type=data['requirements']['model_type'],
                                                    local_trainers=local_trainers,
                                                    validators=validators,
                                                    model=model)
         logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
-        self.encryption_service.set_public_key(data["public_key"])
+        #self.encryption_service.set_public_key(data["public_key"])
+        global_MSE = 1000
+        partial_MSEs = {}
         for i in range(1, self.n_iter+1):
             model, global_MSE, partial_MSEs = self.training_cicle(self.global_models[model_id], i)
         return {'model': model.weights, 'model_id': model_id, 'mse': global_MSE, 'partial_MSEs': partial_MSEs}
