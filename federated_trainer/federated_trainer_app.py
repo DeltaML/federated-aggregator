@@ -106,10 +106,11 @@ def get_contributions():
     partial_MSEs = data["partial_MSEs"]
     public_key = data["public_key"]
     model_id = data["model_id"]
-    if federated_trainer.are_valid(model_id, mse, partial_MSEs, public_key):
-        return jsonify(federated_trainer.calculate_contributions(mse, partial_MSEs))
+    initial_mse = mse # TODO: CHANGE FOR INITIAL MSE
+    if federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
+        return jsonify(federated_trainer.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
     else:
-        return jsonify({"ERROR": "Tried to falsify metrics"}) # Case when the model buyer tried to falsify
+        return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify
 
 
 @app.route('/ping', methods=['POST'])
