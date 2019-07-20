@@ -106,7 +106,7 @@ def get_contributions():
     partial_MSEs = data["partial_MSEs"]
     public_key = data["public_key"]
     model_id = data["model_id"]
-    initial_mse = mse # TODO: CHANGE FOR INITIAL MSE
+    initial_mse = data['initial_MSE']
     if federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
         return jsonify(federated_trainer.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
     else:

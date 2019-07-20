@@ -16,7 +16,18 @@ from copy import deepcopy
 
 
 class GlobalModel:
-    def __init__(self, buyer_id, buyer_host, model_id, model_type, model_status, local_trainers, validators, model, mse, partial_MSEs):
+    def __init__(self,
+                 buyer_id,
+                 buyer_host,
+                 model_id,
+                 model_type,
+                 model_status,
+                 local_trainers,
+                 validators,
+                 model,
+                 initial_mse,
+                 mse,
+                 partial_MSEs):
         """
 
         :param buyer_id: String
@@ -36,6 +47,7 @@ class GlobalModel:
         self.local_trainers = local_trainers
         self.validators = validators
         self.model = model
+        self.initial_mse = initial_mse
         self.mse = mse
         self.partial_MSEs = partial_MSEs
 
@@ -131,11 +143,14 @@ class FederatedTrainer:
                                                    local_trainers=local_trainers,
                                                    validators=validators,
                                                    model=model,
+                                                   initial_mse=None,
                                                    mse=None,
                                                    partial_MSEs=None)
         logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
         #self.encryption_service.set_public_key(data["public_key"])
         model_data = self.global_models[model_id]
+        model_data.initial_mse = self.get_model_metrics_from_validators(model_data)
+        self.send_partial_result_to_model_buyer(model_data, True)
         for i in range(1, self.n_iter+1):
             model_data = self.training_cicle(model_data, i)
 
@@ -209,14 +224,16 @@ class FederatedTrainer:
         model_data.model.gradient_step(avg_gradient, 1.5)
         return trainer, model_data.model.weights
 
-    def send_partial_result_to_model_buyer(self, model_data):
+    def send_partial_result_to_model_buyer(self, model_data, first_update=False):
         partial_result = {
+            'first_update': first_update,
             'model': {
                 'weights': model_data.model.weights.tolist(),
                 'id': model_data.model_id,
                 'status': model_data.model_status,
                 'type': model_data.model_type
             }, 'metrics': {
+                'initial_mse': model_data.initial_mse,
                 'mse': model_data.mse,
                 'partial_MSEs': model_data.partial_MSEs
             }
@@ -300,7 +317,6 @@ class FederatedTrainer:
         self.data_owner_connector.send_encrypted_prediction(data_owner=model.data_owner,
                                                             encrypted_prediction=encrypted_prediction)
 
-
     def serialize_if_activated(self, value):
         return self.encryption_service.__get_serialized_encrypted_value(value) if self.config["ACTIVE_ENCRYPTION"] else value
 
@@ -324,8 +340,12 @@ class FederatedTrainer:
         return True
 
     def calculate_contributions(self, model_id, mse, initial_mse, partial_MSEs):
+        improvement = max([(initial_mse - mse) / initial_mse, 0])
         contributions = {}
         for data_owner in partial_MSEs:
-            contributions[data_owner] = 1 - ((initial_mse - partial_MSEs[data_owner]) + min(partial_MSEs.values())) / initial_mse
-        improvement = max([(initial_mse - mse) / initial_mse, 0])
+            owner_improvement = initial_mse - partial_MSEs[data_owner]
+            contributions[data_owner] = owner_improvement if owner_improvement >= 0 else 0
+        contributions_sum = sum(contributions.values())
+        for data_owner in partial_MSEs:
+            contributions[data_owner] = (contributions[data_owner]) / contributions_sum
         return model_id, improvement, contributions
