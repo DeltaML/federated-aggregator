@@ -38,11 +38,11 @@ def normalize_optimized_collection_argument(active=False):
     return wrap
 
 
-def normalize_optimized_response(active=False):
+def normalize_optimized_response(active=True):
     def wrap(f):
         def wrapped_normalize_optimized_response(*args):
             result = f(*args)
-            result['model'] = result['model'].tolist() if active else result['model']
+            result['model']['weights'] = result['model']['weights'].tolist() if active else result['model']['weights']
             return result
         return wrapped_normalize_optimized_response
     return wrap

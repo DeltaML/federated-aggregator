@@ -98,6 +98,19 @@ def patch_prediction(prediction_id):
     return jsonify("pong")
 
 
+@app.route('/contributions', methods=['POST'])
+def get_contributions():
+    data = request.get_json()
+    logging.info("Data {}".format(data))
+    mse = data['MSE']
+    partial_MSEs = data["partial_MSEs"]
+    public_key = data["public_key"]
+    model_id = data["model_id"]
+    initial_mse = data['initial_MSE']
+    if federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
+        return jsonify(federated_trainer.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
+    else:
+        return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify
 
 
 @app.route('/ping', methods=['POST'])
