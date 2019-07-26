@@ -138,7 +138,7 @@ class FederatedTrainer:
         self.global_models[model_id] = GlobalModel(model_id=model_id,
                                                    buyer_id=data["model_buyer_id"],
                                                    buyer_host=data["remote_address"],
-                                                   model_type=data['requirements']['model_type'],
+                                                   model_type=data['model_type'],
                                                    model_status=data["status"],
                                                    local_trainers=local_trainers,
                                                    validators=validators,
@@ -167,7 +167,7 @@ class FederatedTrainer:
         }
 
     def initialize_global_model(self, data):
-        model = ModelFactory.get_model(data["requirements"]["model_type"])()
+        model = ModelFactory.get_model(data['model_type'])()
         model.set_weights(np.asarray(data["weights"]))
         return model
 
