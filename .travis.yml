@@ -35,3 +35,9 @@ notifications:
     recipients:
       - $USER_1
       - $USER_2
+
+deploy:
+  provider: script
+  script: bash scripts/docker_push
+  on:
+    branch: master

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+NAME=deltaml/model-buyer
+TAG=$(git log -1 --pretty=%H)
+IMG=${NAME}:${TAG}
+LATEST=${NAME}:latest
+
+echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+docker build -t ${IMG} .
+docker tag ${IMG} ${LATEST}
+docker push ${NAME}
