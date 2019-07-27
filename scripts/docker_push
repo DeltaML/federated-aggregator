@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-NAME=deltaml/model-buyer
+NAME=deltaml/federated-aggregator
 TAG=$(git log -1 --pretty=%H)
 IMG=${NAME}:${TAG}
 LATEST=${NAME}:latest
