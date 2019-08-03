@@ -1,4 +1,4 @@
-# Federated learning - Federated Trainer
+# Federated learning - Federated Aggregator
 
 [![Build Status](https://travis-ci.com/DeltaML/federated-aggregator.svg?branch=master)](https://travis-ci.com/DeltaML/federated-aggregator)
 [![Coverage Status](https://coveralls.io/repos/github/DeltaML/federated-aggregator/badge.svg?branch=master)](https://coveralls.io/github/DeltaML/federated-aggregator?branch=master)
