@@ -9,8 +9,10 @@ class ModelBuyerConnector:
         self.remote_address = "cte_model_buyer"  # TODO: SACAR ESTA NEGREADA
 
     def send_result(self, result):
-        url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['id'])
+        url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['model_id'])
         logging.info("url {}".format(url))
+        #TODO Temporal fix
+        result["first_update"] = False
         requests.put(url, json=result)
 
     def send_partial_result(self, result):
