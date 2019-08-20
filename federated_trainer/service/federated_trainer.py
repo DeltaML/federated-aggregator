@@ -106,8 +106,8 @@ class FederatedTrainer:
         linked_data_owners = []
         owners_with_data = self.send_requirements_to_data_owner(data)
         for data_owner_link in owners_with_data:
-            if (data['model_id'] in data_owner_link) and (data_owner_link[data['model_id']][1]):
-                data_owner_key = data_owner_link[data['model_id']][0]
+            if (data['model_id'] == data_owner_link['model_id']) and (data_owner_link['has_dataset']):
+                data_owner_key = data_owner_link['data_owner_id']
                 linked_data_owners.append(self.data_owners[data_owner_key])
         return linked_data_owners
 
@@ -261,7 +261,7 @@ class FederatedTrainer:
         :return: Nothing
         """
         logging.info("Send global models")
-        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient)
+        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient, model_data.model_id)
 
     def get_gradients(self, model_data):
         """
