@@ -63,7 +63,7 @@ class FederatedTrainer:
         self.config = config
         self.active_encryption = self.config["ACTIVE_ENCRYPTION"]
         self.data_owner_connector = DataOwnerConnector(self.config["DATA_OWNER_PORT"], encryption_service, self.active_encryption)
-        self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_PORT"])
+        self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_HOST"], self.config["MODEL_BUYER_PORT"])
         self.global_models = {}
         self.n_iter = self.config["MAX_ITERATIONS"]
         self.n_iter_partial_res = self.config["ITERS_UNTIL_PARTIAL_RESULT"]
