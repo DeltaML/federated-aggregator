@@ -18,8 +18,8 @@ class DataOwnerConnector:
         self.encryption_service = encryption_service
         self.active_encryption = active_encryption
 
-    def send_gradient_to_data_owners(self, data_owners, gradient):
-        args = [self._build_data(data_owner, gradient) for data_owner in data_owners]
+    def send_gradient_to_data_owners(self, data_owners, gradient, model_id):
+        args = [self._build_data(data_owner, gradient, model_id) for data_owner in data_owners]
         self.async_thread_pool.run(executable=self._send_gradient, args=args)
 
     @optimized_dict_collection_response(optimization=np.asarray, active=True)
@@ -42,7 +42,7 @@ class DataOwnerConnector:
     @optimized_collection_response(optimization=np.asarray, active=True)
     def send_requirements_to_data_owners(self, data_owners, data):
         args = [
-            ("http://{}:{}/data/requirements".format(data_owner.host, self.data_owner_port), data)
+            ("http://{}:{}/trainings".format(data_owner.host, self.data_owner_port), data)
             for data_owner in data_owners
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
@@ -54,11 +54,11 @@ class DataOwnerConnector:
         logging.info(model)
         data = {'model': model.tolist(), 'model_type': model_data.model_type, 'model_id': model_data.model_id}
         args = [
-            ("http://{}:{}/model/metrics".format(validator.host, self.data_owner_port), data)
+            ("http://{}:{}/trainings/{}/metrics".format(validator.host, self.data_owner_port, model_data.model_id), data)
             for validator in validators
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
-        return [result for result in results]
+        return [result['mse'] for result in results]
 
     @deserialize_encrypted_server_data()
     def _get_update_from_data_owner(self, data):
@@ -67,7 +67,7 @@ class DataOwnerConnector:
         :return:
         """
         data_owner, model_type, weights, model_id = data
-        url = "http://{}:{}/weights".format(data_owner.host, self.data_owner_port)
+        url = "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id)
         payload = {"model_type": model_type, "weights": weights.tolist()}
         response = requests.post(url, json=payload)
         #result = {'data_owner': data_owner.id, 'model_id': model_id, 'update': response.json()}
@@ -89,8 +89,8 @@ class DataOwnerConnector:
 
     # ---
     @normalize_optimized_collection_argument(active=True)
-    def _build_data(self, data_owner, gradient):
-        return "http://{}:{}/step".format(data_owner.host, self.data_owner_port), {"gradient": gradient}
+    def _build_data(self, data_owner, gradient, model_id):
+        return "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id), {"gradient": gradient}
 
     @staticmethod
     def _send_post_request_to_data_owner(data):
