@@ -54,7 +54,7 @@ class DataOwnerConnector:
         logging.info(model)
         data = {'model': model.tolist(), 'model_type': model_data.model_type, 'model_id': model_data.model_id}
         args = [
-            ("http://{}:{}/metrics".format(validator.host, self.data_owner_port), data)
+            ("http://{}:{}/trainings/{}/metrics".format(validator.host, self.data_owner_port, model_data.model_id), data)
             for validator in validators
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
