@@ -27,6 +27,7 @@ class GlobalModel:
                  model,
                  initial_mse,
                  mse,
+                 public_key,
                  partial_MSEs):
         """
 
@@ -50,6 +51,7 @@ class GlobalModel:
         self.initial_mse = initial_mse
         self.mse = mse
         self.partial_MSEs = partial_MSEs
+        self.public_key = public_key
 
 
 class FederatedTrainer:
@@ -145,6 +147,7 @@ class FederatedTrainer:
                                                    model=model,
                                                    initial_mse=None,
                                                    mse=None,
+                                                   public_key=data["public_key"],
                                                    partial_MSEs=None)
         logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
         #self.encryption_service.set_public_key(data["public_key"])
