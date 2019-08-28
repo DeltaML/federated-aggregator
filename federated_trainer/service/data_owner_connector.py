@@ -52,7 +52,10 @@ class DataOwnerConnector:
     def get_model_metrics_from_validators(self, validators, model_data, weights=None):
         model = weights if weights is not None else model_data.model.weights
         logging.info(model)
-        data = {'model': model.tolist(), 'model_type': model_data.model_type, 'model_id': model_data.model_id}
+        data = {'model': model.tolist(),
+                'model_type': model_data.model_type,
+                'model_id': model_data.model_id,
+                'public_key': model_data.public_key}
         args = [
             ("http://{}:{}/trainings/{}/metrics".format(validator.host, self.data_owner_port, model_data.model_id), data)
             for validator in validators

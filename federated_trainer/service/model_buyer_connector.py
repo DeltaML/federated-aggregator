@@ -4,9 +4,9 @@ import requests
 
 class ModelBuyerConnector:
 
-    def __init__(self, model_buyer_port):
-        self.model_buyer_port = model_buyer_port
-        self.remote_address = "cte_model_buyer"  # TODO: SACAR ESTA NEGREADA
+    def __init__(self, host, port):
+        self.remote_address = host
+        self.model_buyer_port = port
 
     def send_result(self, result):
         url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['model_id'])
