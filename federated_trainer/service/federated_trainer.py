@@ -154,9 +154,12 @@ class FederatedTrainer:
         model_data = self.global_models[model_id]
         model_data.initial_mse = self.get_model_metrics_from_validators(model_data)
         self.send_partial_result_to_model_buyer(model_data, True)
-        for i in range(1, self.n_iter+1):
+        for i in range(1, self.n_iter + 1):
+            last_mse = model_data.mse
             model_data = self.training_cicle(model_data, i)
-
+            if self.has_converged(model_data.mse, last_mse) and i >= self.n_iter_partial_res:
+                logging.info("BREAKING")
+                break
         return {
             'model': {
                 'weights': model_data.model.weights,
@@ -168,6 +171,12 @@ class FederatedTrainer:
                 'partial_MSEs': model_data.partial_MSEs
             }
         }
+
+    def has_converged(self, current_mse, last_mse):
+        return last_mse is not None and current_mse is not None and self.loss_improvement(last_mse, current_mse) < 0.001
+
+    def loss_improvement(self, last_mse, current_mse):
+        return abs((last_mse - current_mse) / last_mse)
 
     def initialize_global_model(self, data):
         model = ModelFactory.get_model(data['model_type'])()
@@ -204,7 +213,7 @@ class FederatedTrainer:
         """
         logging.info("Updating global model")
         avg_gradient = self.federated_averaging(gradients, model_data)
-        model_data.model.gradient_step(avg_gradient, 1.5)
+        model_data.model.gradient_step(avg_gradient, 0.1)
         return model_data.model.weights, avg_gradient
 
     def partial_update_model(self, model_data, gradients, trainers, filtered_index):
@@ -224,7 +233,7 @@ class FederatedTrainer:
         trainer = trainers[filtered_index]
         avg_gradient = self.federated_averaging(gradients, model_data)
         logging.info("Avg gradient {}".format(avg_gradient))
-        model_data.model.gradient_step(avg_gradient, 1.5)
+        model_data.model.gradient_step(avg_gradient, 0.1)
         return trainer, model_data.model.weights
 
     def send_partial_result_to_model_buyer(self, model_data, first_update=False):
