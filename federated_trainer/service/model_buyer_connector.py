@@ -19,7 +19,7 @@ class ModelBuyerConnector:
         url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['id'])
         logging.info("url {}".format(url))
         logging.info("Partials {}".format(result))
-        requests.patch(url, json=result)
+        return requests.patch(url, json=result).json()
 
     def send_encrypted_prediction(self, model, encrypted_prediction):
         """
