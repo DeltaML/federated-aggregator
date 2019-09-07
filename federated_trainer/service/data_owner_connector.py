@@ -18,8 +18,11 @@ class DataOwnerConnector:
         self.encryption_service = encryption_service
         self.active_encryption = active_encryption
 
+    #@normalize_optimized_collection_argument(active=True)
     def send_gradient_to_data_owners(self, data_owners, gradient, model_id, public_key):
+
         args = [self._build_data(data_owner, gradient, model_id, public_key) for data_owner in data_owners]
+        logging.info(gradient)
         self.async_thread_pool.run(executable=self._send_gradient, args=args)
 
     @optimized_dict_collection_response(optimization=np.asarray, active=True)
@@ -69,8 +72,11 @@ class DataOwnerConnector:
             for validator in validators
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
+        results = [result['mse'] for result in results]
         logging.info(results)
-        return [result['mse'] for result in results]
+        results = [self.encryption_service.get_deserialized_collection(result) if self.active_encryption else result for result in results]
+        logging.info(results)
+        return results
 
     @deserialize_encrypted_server_data()
     def _get_update_from_data_owner(self, data):
@@ -80,7 +86,8 @@ class DataOwnerConnector:
         """
         data_owner, model_type, weights, model_id, public_key = data
         url = "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id)
-        payload = {"model_type": model_type, "weights": weights.tolist(), "public_key": public_key}
+        payload = {"model_type": model_type, "weights": self.encryption_service.get_serialized_collection(weights) if self.active_encryption else weights, "public_key": public_key}
+        logging.info(payload)
         response = requests.post(url, json=payload)
         #result = {'data_owner': data_owner.id, 'model_id': model_id, 'update': response.json()}
         return response.json()
@@ -93,6 +100,7 @@ class DataOwnerConnector:
         :return:
         """
         url, payload = data
+        logging.info(payload)
         requests.put(url, json=payload)
 
     @deserialize_encrypted_server_data_2()

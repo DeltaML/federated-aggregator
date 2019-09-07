@@ -27,7 +27,7 @@ def serialize_encrypted_server_gradient(schema):
     def wrap(f):
         def wrapped_serialize_encrypted_server_gradient(*args):
             service = args[0]
-            data = dict(gradient=service.encryption_service.get_serialized_collection(args[1][1]["gradient"]) if service.active_encryption else args[1][1]["gradient"])
+            data = dict(gradient=service.encryption_service.get_serialized_collection(args[1][1]["gradient"]) if service.active_encryption else args[1][1]["gradient"], public_key=args[1][1]["public_key"])
             params = args[0], (args[1][0], data)
             result = f(*params)
             return schema(result)
