@@ -1,5 +1,6 @@
-from functools import reduce
+import logging
 from commons.model.model_service import ModelFactory
+
 
 class FederatedValidator(object):
 
@@ -28,10 +29,10 @@ class FederatedValidator(object):
         global_model.set_weights(averaged_updates)
         data_owner_mse = data_owner_model.predict(X_test, y_test).mse
         global_mse = global_model.predict(X_test, y_test).mse
-        print("DataOwner {} mse: {}".format(data_owner, data_owner_mse))
-        print("GlobalModel mse: {}".format(global_mse))
+        logging.info("DataOwner {} mse: {}".format(data_owner, data_owner_mse))
+        logging.info("GlobalModel mse: {}".format(global_mse))
         self.acc_diff_error_by_owner[data_owner] += data_owner_mse - global_mse
-        print("Diff DataOwner {}: {}".format(data_owner, self.acc_diff_error_by_owner[data_owner]))
+        logging.info("Diff DataOwner {}: {}".format(data_owner, self.acc_diff_error_by_owner[data_owner]))
 
     def get_data_owners_contribution(self):
         """
@@ -50,5 +51,5 @@ class FederatedValidator(object):
         contribution = {}
         for data_owner in self.acc_diff_error_by_owner:
             contribution[data_owner] = self.acc_diff_error_by_owner[data_owner] / float(sum_diff)
-        print("Contributions", contribution)
+        logging.info("Contributions", contribution)
         return contribution

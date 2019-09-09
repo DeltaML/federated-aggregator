@@ -23,18 +23,18 @@ These instructions will get you a copy of the project up and running on your loc
 A step by step series that tell you how to get a development env running
 
 ```
-git clone git@github.com:DeltaML/federated-learning-poc.git
-cd federated-learning-poc/
+git clone git@github.com:DeltaML/federated_aggregator.git
+cd federated_aggregator/
 python3 -m venv venv
 source venv/bin/activate
-pip install -r federated_trainer/requirements.txt
+pip install -r federated_aggregator/requirements.txt
 ```
 
 ## Run
 
 ### Using command line
 ``` bash
-    gunicorn -b "0.0.0.0:8080" --chdir federated_trainer/ wsgi:app --preload
+    gunicorn -b "0.0.0.0:8080" --chdir federated_aggregator/ wsgi:app --preload
 ``` 
 
 
@@ -47,9 +47,9 @@ pip install -r federated_trainer/requirements.txt
 
 ### Using Pycharm
 
-	Script Path: .../federated_trainer/virtualenv/bin/gunicorn
+	Script Path: .../federated_aggregator/virtualenv/bin/gunicorn
 	Parameters: -b "0.0.0.0:8080" wsgi:app --preload
-	Working directory: ../federated_trainer
+	Working directory: ../federated_aggregator
 
 
 ## Usage 
