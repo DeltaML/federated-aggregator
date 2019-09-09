@@ -3,13 +3,13 @@ import json
 from functools import reduce
 from threading import Thread
 
+from commons.operations_utils.functions import serialize, deserialize
 from commons.decorators.decorators import normalize_optimized_response
 from commons.operations_utils.functions import sum_collection
 from federated_trainer.models.data_owner_instance import DataOwnerInstance
 from federated_trainer.service.data_owner_connector import DataOwnerConnector
 from federated_trainer.service.decorators import serialize_encrypted_server_data
 from federated_trainer.service.model_buyer_connector import ModelBuyerConnector
-from federated_trainer.service.federated_validator import FederatedValidator
 from commons.model.model_service import ModelFactory
 import numpy as np
 from copy import deepcopy
@@ -81,7 +81,6 @@ class FederatedTrainer:
         :param data_owner_data: Dict[String, String], Keys: id, host, port
         :return: Dict[String, Int]
         """
-        logging.info("Register data owner with {}".format(data_owner_data))
         new_data_owner = DataOwnerInstance(data_owner_data)
         self.data_owners[new_data_owner.id] = new_data_owner
         return {'data_owner_id': len(self.data_owners) - 1}
@@ -90,7 +89,6 @@ class FederatedTrainer:
         return self.data_owner_connector.send_requirements_to_data_owners(list(self.data_owners.values()), data)
 
     def async_server_processing(self, func, *args):
-        logging.info("process_in_background...")
         result = func(*args)
         self.model_buyer_connector.send_result(result)
 
@@ -135,7 +133,6 @@ class FederatedTrainer:
         logging.info("Validators: {}".format(list(map(lambda x: x.id, validators))))
         return local_trainers, validators
 
-    @normalize_optimized_response(active=True)
     def federated_learning(self, data):
         logging.info("Init federated_learning")
         model_id = data['model_id']
@@ -159,29 +156,21 @@ class FederatedTrainer:
         logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
         model_data = self.global_models[model_id]
         diffs = self.get_model_metrics_from_validators(model_data)
-        model_update = self.send_partial_result_to_model_buyer(model_data, diffs, True)
+        model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
         mses = [np.mean(np.asarray(diff)**2) for diff in model_update['diffs']]
         model_data.initial_mse = np.mean(mses)
         model_data.decrypted_mse = model_data.initial_mse
-        logging.info(model_data.decrypted_mse)
         self.data_owner_connector.send_mses(validators, model_data, mses)
         for i in range(1, self.n_iter + 1):
             last_mse = model_data.decrypted_mse
             logging.info(last_mse)
             model_data = self.training_cicle(model_data, i)
-            logging.info("--------------- ITERATION: {}".format(i))
             if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0:
-                logging.info("BREAKING")
                 break
         return {
             'model': {
-                'weights': model_data.model.weights,
-                'model_id': model_data.model_id,
-                'status': model_data.model_status,
-                'type': model_data.model_type
-            }, 'metrics': {
-                'mse': model_data.mse,
-                'partial_MSEs': model_data.partial_MSEs
+                'weights': serialize(model_data.model.weights, self.encryption_service, model_data.public_key),
+                'id': model_data.model_id
             }
         }
 
@@ -200,27 +189,21 @@ class FederatedTrainer:
     def training_cicle(self, model_data, i):
         gradients, local_trainers = self.get_gradients(model_data)
         logging.info("Updates: {}".format(gradients))
-        logging.info("LocalTrainer: {}".format(local_trainers))
-        #partial_models = [self.partial_update_model(deepcopy(model_data), gradients, local_trainers, i)
-        #                  for i in range(len(local_trainers))]
-        logging.info("Something")
+        partial_models = [self.partial_update_model(deepcopy(model_data), gradients, local_trainers, i)
+                          for i in range(len(local_trainers))]
         model_data.model.weights, avg_gradient = self.update_model(model_data, gradients)
         logging.info("Done updating model")
-
         if (i % self.n_iter_partial_res) == 0:
             logging.info("Calculating mses")
             diffs = self.get_model_metrics_from_validators(model_data)
-            # partial_diffs = self.get_partial_model_metrics_from_validators(partial_models, model_data)
+            partial_diffs = self.get_partial_model_metrics_from_validators(partial_models, model_data)
             logging.info("Sending partial results")
-            model_update = self.send_partial_result_to_model_buyer(model_data, diffs)
+            model_update = self.send_partial_result_to_model_buyer(model_data, diffs, partial_diffs)
             mses = [np.mean(np.asarray(diff) ** 2) for diff in model_update['diffs']]
             model_data.decrypted_mse = np.mean(mses)
             model_data.mse = model_data.decrypted_mse
-            #model_data.partial_MSEs
             self.data_owner_connector.send_mses(model_data.validators, model_data, mses)
             model_data.model.weights = model_update['weights']
-        logging.info("Validators MSEs: {}".format(model_data.mse))
-        logging.info("Model {}".format(model_data.model))
         self.send_avg_gradient(avg_gradient, model_data)
         return model_data
 
@@ -234,9 +217,7 @@ class FederatedTrainer:
         """
         logging.info("Updating global model")
         avg_gradient = self.federated_averaging(gradients, model_data)
-        logging.info(type(avg_gradient))
         model_data.model.gradient_step(avg_gradient, model_data.gradient_step)
-        logging.info("STEP")
         return model_data.model.weights, avg_gradient
 
     def partial_update_model(self, model_data, gradients, trainers, filtered_index):
@@ -255,45 +236,31 @@ class FederatedTrainer:
         gradients = np.delete(gradients, filtered_index, 0)
         trainer = trainers[filtered_index]
         avg_gradient = self.federated_averaging(gradients, model_data)
-        logging.info("Avg gradient {}".format(avg_gradient))
         model_data.model.gradient_step(avg_gradient, model_data.gradient_step)
         return trainer, model_data.model.weights
 
-    def send_partial_result_to_model_buyer(self, model_data, diffs, first_update=False):
-        # TODO: Keep working here
-        serialized_diffs = [self.encryption_service.get_serialized_collection(diff) if self.active_encryption else diff.tolist() for diff in diffs]
+    def send_partial_result_to_model_buyer(self, model_data, diffs, partial_diffs={}, first_update=False):
+        for trainer in partial_diffs:
+            partial_diffs[trainer] = [serialize(diff, self.encryption_service, model_data.public_key) for diff in partial_diffs[trainer]]
         weights = model_data.model.weights
-        weights = self.encryption_service.get_serialized_collection(weights) if self.active_encryption else weights.tolist()
-
         partial_result = {
             'first_update': first_update,
             'model': {
-                'weights': weights,
+                'weights': serialize(weights, self.encryption_service, model_data.public_key),
                 'id': model_data.model_id,
                 'status': model_data.model_status,
                 'type': model_data.model_type
             }, 'metrics': {
                 'initial_mse': model_data.initial_mse,
                 'mse': model_data.mse,
-                'partial_MSEs': model_data.partial_MSEs,
-                'diffs': serialized_diffs
+                'partial_diffs': partial_diffs,
+                'diffs': [serialize(diff, self.encryption_service, model_data.public_key) for diff in diffs]
             }
         }
         model_update = self.model_buyer_connector.send_partial_result(partial_result)
-        model_update['weights'] = self.encryption_service.get_deserialized_collection(model_update['weights']) if self.active_encryption else model_update['weights']
-        model_update['weights'] = np.asarray(model_update['weights'])
+        model_update['weights'] = deserialize(model_update['weights'], self.encryption_service, model_data.public_key)
         return model_update
 
-    def _format_mses_dict(self, mses_dict):
-        mses = []
-        for data_owner, mse in mses_dict:
-            mses.append({
-                'data_owner': mses_dict[data_owner],
-                'partial_MSE': mses_dict[mse]
-            })
-        return mses
-
-    @serialize_encrypted_server_data(schema=json.dumps)
     def federated_learning_wrapper(self, data):
         return self.federated_learning(data)
 
@@ -326,15 +293,12 @@ class FederatedTrainer:
         :return:
         """
         logging.info("Federated averaging")
-        logging.info("UPDATES {}".format(updates))
-        acc = 0  # reduce(sum_collection, updates) / len(model_data.local_trainers)
-        for i in range(len(updates)):
-            logging.info("ITER ACC:" .format(acc))
-            acc += updates[i]
-
-        logging.info("SUM: {}".format(acc))
-        average = acc / len(model_data.local_trainers)
-        logging.info("AVG: {}".format(acc))
+        average = reduce(sum_collection, updates) / len(model_data.local_trainers)
+        #acc = 0  # reduce(sum_collection, updates) / len(model_data.local_trainers)
+        #for i in range(len(updates)):
+        #    logging.info("ITER ACC:" .format(acc))
+        #    acc += updates[i]
+        #average = acc / len(model_data.local_trainers)
         return average
 
     def get_trained_models(self, model_data):
@@ -344,22 +308,17 @@ class FederatedTrainer:
 
     def get_model_metrics_from_validators(self, model_data):
         logging.info("Getting global mse")
-        mses_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data)
-        logging.info(mses_from_validators)
-        ##return sum(mses_from_validators.tolist()) / len(model_data.validators)
-        return mses_from_validators
+        diffs_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data)
+        logging.info(diffs_from_validators)
+        return diffs_from_validators
 
     def get_partial_model_metrics_from_validators(self, partial_models, model_data):
         trainers_mses = {}
         logging.info("Getting partials mses")
         for trainer, model_weights in partial_models:
             logging.info("Calculating mse for model without trainer: {}".format(trainer))
-            logging.info("Model weigths without the trainer {}".format(model_weights))
-            logging.info("Validators {}".format(model_data.validators))
-            mses = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data, model_weights)
-            logging.info("MSE for model without trainer: {}".format(mses))
-            avg_mse = sum(mses)/len(mses)
-            trainers_mses[trainer] = avg_mse
+            diffs = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data, model_weights)
+            trainers_mses[trainer] = diffs
         return trainers_mses
 
     def send_prediction_to_buyer(self, data):

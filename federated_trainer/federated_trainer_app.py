@@ -18,7 +18,7 @@ dictConfig({
         'formatter': 'default'
     }},
     'root': {
-        'level': 'ERROR',
+        'level': 'INFO',
         'handlers': ['wsgi']
     }
 })
@@ -38,7 +38,7 @@ def create_app():
 
 
 app = create_app()
-encryption_service = EncryptionService()
+encryption_service = EncryptionService(is_active=app.config["ACTIVE_ENCRYPTION"])
 federated_trainer = FederatedTrainer(encryption_service=encryption_service, config=app.config)
 logging.info("federated_trainer running")
 
@@ -107,7 +107,7 @@ def get_contributions():
     public_key = data["public_key"]
     model_id = data["model_id"]
     initial_mse = data['initial_MSE']
-    if federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
+    if True: #federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
         return jsonify(federated_trainer.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
     else:
         return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify

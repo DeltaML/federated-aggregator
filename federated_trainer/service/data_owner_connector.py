@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import requests
 
-
+from commons.operations_utils.functions import serialize, deserialize
 from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument, optimized_dict_collection_response
 from commons.utils.async_thread_pool_executor import AsyncThreadPoolExecutor
 from federated_trainer.service.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
@@ -18,7 +18,6 @@ class DataOwnerConnector:
         self.encryption_service = encryption_service
         self.active_encryption = active_encryption
 
-    #@normalize_optimized_collection_argument(active=True)
     def send_gradient_to_data_owners(self, data_owners, gradient, model_id, public_key):
 
         args = [self._build_data(data_owner, gradient, model_id, public_key) for data_owner in data_owners]
@@ -57,16 +56,17 @@ class DataOwnerConnector:
             "http://{}:{}/trainings/{}/metrics".format(validators[i].host, self.data_owner_port, model_data.model_id), {'mse': mses[i]})
             for i in range(len(validators))
         ]
-        results = self.async_thread_pool.run(executable=self._send_put_request_to_data_owner, args=args)
+        self.async_thread_pool.run(executable=self._send_put_request_to_data_owner, args=args)
 
-    @optimized_collection_response(optimization=np.asarray, active=True)
+    #@optimized_collection_response(optimization=np.asarray, active=True)
     def get_model_metrics_from_validators(self, validators, model_data, weights=None):
         model = weights if weights is not None else model_data.model.weights
         logging.info(model)
-        data = {'model': self.encryption_service.get_serialized_collection(model) if self.active_encryption else model.tolist(),
+        data = {'model': serialize(model, self.encryption_service, model_data.public_key),
                 'model_type': model_data.model_type,
                 'model_id': model_data.model_id,
-                'public_key': model_data.public_key}
+                'public_key': model_data.public_key
+                }
         args = [
             ("http://{}:{}/trainings/{}/metrics".format(validator.host, self.data_owner_port, model_data.model_id), data)
             for validator in validators
@@ -74,7 +74,7 @@ class DataOwnerConnector:
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
         results = [result['mse'] for result in results]
         logging.info(results)
-        results = [self.encryption_service.get_deserialized_collection(result) if self.active_encryption else result for result in results]
+        results = [deserialize(result, self.encryption_service, model_data.public_key) for result in results]
         logging.info(results)
         return results
 
@@ -89,7 +89,6 @@ class DataOwnerConnector:
         payload = {"model_type": model_type, "weights": self.encryption_service.get_serialized_collection(weights) if self.active_encryption else weights, "public_key": public_key}
         logging.info(payload)
         response = requests.post(url, json=payload)
-        #result = {'data_owner': data_owner.id, 'model_id': model_id, 'update': response.json()}
         return response.json()
 
     @serialize_encrypted_server_gradient(schema=json.dumps)
