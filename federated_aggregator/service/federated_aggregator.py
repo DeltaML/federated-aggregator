@@ -119,15 +119,20 @@ class FederatedAggregator:
                                                        initial_mse=None,
                                                        mse=None,
                                                        public_key=data["public_key"],
-                                                       partial_MSEs=None)
+                                                       partial_MSEs=None,
+                                                       step=data["step"])
             logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
             model_data = self.global_models[model_id]
             # TODO agrojas: refactor this!
             model_data.initial_mse = self.get_model_metrics_from_validators(model_data)
-
-            self.send_partial_result_to_model_buyer(model_data, True)
+            model_update = self.send_partial_result_to_model_buyer(model_data, True)
+            model_data.decrypted_mse = model_update['mse']
             for i in range(1, self.n_iter + 1):
+                last_mse = model_data.decrypted_mse
                 model_data = self.training_cicle(model_data, i)
+                if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0:
+                    logging.info("BREAKING")
+                    break
             logging.info('Fished iterations for model {} {}'.format(model_id, model_data))
             # TODO agrojas: to dto
             model_buyer_data = {
@@ -165,6 +170,12 @@ class FederatedAggregator:
         }
         self.model_buyer_connector.send_result(error_data)
 
+    def has_converged(self, current_mse, last_mse):
+        return last_mse is not None and current_mse is not None and self.loss_improvement(last_mse, current_mse) < 0.001
+
+    def loss_improvement(self, last_mse, current_mse):
+        return abs((last_mse - current_mse) / last_mse)
+
     def initialize_global_model(self, data):
         return ModelFactory.get_model(data['model_type'])(weights=np.asarray(data["weights"]))
 
@@ -182,7 +193,9 @@ class FederatedAggregator:
         model_data.partial_MSEs = self.get_partial_model_metrics_from_validators(partial_models, model_data)
         if (i % self.n_iter_partial_res) == 0:
             logging.info("Sending partial results")
-            self.send_partial_result_to_model_buyer(model_data)
+            model_update = self.send_partial_result_to_model_buyer(model_data)
+            model_data.model.weights = np.asarray(model_update['weights'])
+            model_data.decrypted_mse = model_update['mse']
         logging.info("Validators MSEs: {}".format(model_data.mse))
         self.send_avg_gradient(avg_gradient, model_data)
         return model_data
@@ -197,7 +210,7 @@ class FederatedAggregator:
         """
         logging.info("Updating global model")
         avg_gradient = self.federated_averaging(gradients, model_data)
-        model_data.model.gradient_step(avg_gradient, 1.5)
+        model_data.model.gradient_step(avg_gradient, model_data.gradient_step)
         return model_data.model.weights, avg_gradient
 
     def partial_update_model(self, model_data, gradients, trainers, filtered_index):
@@ -217,7 +230,7 @@ class FederatedAggregator:
         trainer = trainers[filtered_index]
         avg_gradient = self.federated_averaging(gradients, model_data)
         logging.info("Avg gradient {}".format(avg_gradient))
-        model_data.model.gradient_step(avg_gradient, 1.5)
+        model_data.model.gradient_step(avg_gradient, model_data.gradient_step)
         return trainer, model_data.model.weights
 
     def send_partial_result_to_model_buyer(self, model_data, first_update=False):
@@ -234,7 +247,7 @@ class FederatedAggregator:
                 'partial_MSEs': model_data.partial_MSEs
             }
         }
-        self.model_buyer_connector.send_partial_result(partial_result)
+        return self.model_buyer_connector.send_partial_result(partial_result)
 
     def _format_mses_dict(self, mses_dict):
         mses = []

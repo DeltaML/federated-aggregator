@@ -11,7 +11,8 @@ class GlobalModel:
                  initial_mse,
                  mse,
                  public_key,
-                 partial_MSEs):
+                 partial_MSEs,
+                 step):
         """
 
         :param buyer_id: String
@@ -35,3 +36,5 @@ class GlobalModel:
         self.mse = mse
         self.partial_MSEs = partial_MSEs
         self.public_key = public_key
+        self.decrypted_mse = None
+        self.gradient_step = step
