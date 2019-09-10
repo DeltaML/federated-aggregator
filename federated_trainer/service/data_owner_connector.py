@@ -58,7 +58,6 @@ class DataOwnerConnector:
         ]
         self.async_thread_pool.run(executable=self._send_put_request_to_data_owner, args=args)
 
-    #@optimized_collection_response(optimization=np.asarray, active=True)
     def get_model_metrics_from_validators(self, validators, model_data, weights=None):
         model = weights if weights is not None else model_data.model.weights
         logging.info(model)
@@ -72,7 +71,7 @@ class DataOwnerConnector:
             for validator in validators
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
-        results = [result['mse'] for result in results]
+        results = [result['diff'] for result in results]
         logging.info(results)
         results = [deserialize(result, self.encryption_service, model_data.public_key) for result in results]
         logging.info(results)
@@ -106,7 +105,6 @@ class DataOwnerConnector:
     def _send_get_request_to_data_owner(self, url):
         return requests.get(url).json()
 
-    # ---
     @normalize_optimized_collection_argument(active=True)
     def _build_data(self, data_owner, gradient, model_id, public_key):
         return "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id), {"gradient": gradient, "public_key": public_key}

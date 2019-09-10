@@ -1,21 +1,16 @@
 import logging
-import json
 from functools import reduce
 from threading import Thread
 
 from commons.operations_utils.functions import serialize, deserialize
-from commons.decorators.decorators import normalize_optimized_response
 from commons.operations_utils.functions import sum_collection
 from federated_trainer.models.data_owner_instance import DataOwnerInstance
 from federated_trainer.service.data_owner_connector import DataOwnerConnector
-from federated_trainer.service.decorators import serialize_encrypted_server_data
 from federated_trainer.service.model_buyer_connector import ModelBuyerConnector
 from commons.model.model_service import ModelFactory
 import numpy as np
 from copy import deepcopy
 
-log = logging.getLogger()
-log.setLevel(logging.ERROR)
 
 class GlobalModel:
     def __init__(self,
@@ -33,7 +28,6 @@ class GlobalModel:
                  partial_MSEs,
                  step):
         """
-
         :param buyer_id: String
         :param buyer_host:
         :param model_id: String
@@ -272,7 +266,6 @@ class FederatedTrainer:
         :return: Nothing
         """
         logging.info("Send global models")
-        logging.info(gradient)
         self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient, model_data.model_id, model_data.public_key)
 
     def get_gradients(self, model_data):
@@ -281,7 +274,6 @@ class FederatedTrainer:
         :return: the gradients calculated after a gradient descent step in the data owners, and the data owners that
         performed such calculation.
         """
-        logging.info(model_data.model.weights)
         gradients, owners = self.data_owner_connector.get_gradient_from_data_owners(model_data)
         return gradients, owners
 
@@ -294,11 +286,6 @@ class FederatedTrainer:
         """
         logging.info("Federated averaging")
         average = reduce(sum_collection, updates) / len(model_data.local_trainers)
-        #acc = 0  # reduce(sum_collection, updates) / len(model_data.local_trainers)
-        #for i in range(len(updates)):
-        #    logging.info("ITER ACC:" .format(acc))
-        #    acc += updates[i]
-        #average = acc / len(model_data.local_trainers)
         return average
 
     def get_trained_models(self, model_data):
@@ -309,7 +296,6 @@ class FederatedTrainer:
     def get_model_metrics_from_validators(self, model_data):
         logging.info("Getting global mse")
         diffs_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data)
-        logging.info(diffs_from_validators)
         return diffs_from_validators
 
     def get_partial_model_metrics_from_validators(self, partial_models, model_data):
