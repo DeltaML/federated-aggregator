@@ -9,7 +9,8 @@ class ModelBuyerConnector:
         self.model_buyer_port = port
 
     def send_result(self, result):
-        url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['model_id'])
+        logging.info(result)
+        url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['id'])
         logging.info("url {}".format(url))
         #TODO Temporal fix
         result["first_update"] = False

@@ -3,13 +3,15 @@ from commons.encryption.config import ENCRYPTION_TYPE
 
 class EncryptionService:
 
-    def __init__(self, homomorphic_encryption=ENCRYPTION_TYPE):
+    def __init__(self, homomorphic_encryption=ENCRYPTION_TYPE, is_active=False):
         """
 
         :param homomorphic_encryption:
         """
         self.homomorphic_encryption = homomorphic_encryption()
+        self.is_active = is_active
         self.public_key, self.private_key = None, None
+
 
     def generate_key_pair(self, key_length):
         """

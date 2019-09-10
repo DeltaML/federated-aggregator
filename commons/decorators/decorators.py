@@ -1,7 +1,9 @@
 def optimized_collection_parameter(optimization, active=False):
     def wrap(f):
         def wrapped_optimized_collection_parameter(*args):
-            params = args[0], optimization(args[1]) if active else args[1]
+            collection = optimization(args[2]) if active else args[2]
+            params = list(args)
+            params[2] = collection
             return f(*params)
         return wrapped_optimized_collection_parameter
     return wrap
@@ -32,7 +34,9 @@ def normalize_optimized_collection_argument(active=False):
     def wrap(f):
         def wrapped_normalize_optimized_collection(*args):
             # TODO: Refactor!!!
-            params = args[0], args[1], args[2].tolist() if active else args[2], args[3]
+            data = args[2].tolist() if active else args[2]
+            params = list(args)
+            params[2] = data
             return f(*params)
         return wrapped_normalize_optimized_collection
     return wrap
