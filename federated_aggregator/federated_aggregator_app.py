@@ -38,7 +38,7 @@ def create_app():
 
 
 app = create_app()
-encryption_service = EncryptionService()
+encryption_service = EncryptionService(is_active=app.config["ACTIVE_ENCRYPTION"])
 federated_aggregator = FederatedAggregator(encryption_service=encryption_service, config=app.config)
 logging.info("federated_aggregator running")
 
