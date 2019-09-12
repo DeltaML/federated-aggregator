@@ -5,7 +5,7 @@ import numpy as np
 import requests
 
 from commons.operations_utils.functions import serialize, deserialize
-from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument, optimized_dict_collection_response
+from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument
 from commons.utils.async_thread_pool_executor import AsyncThreadPoolExecutor
 from federated_aggregator.service.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
 
@@ -21,7 +21,6 @@ class DataOwnerConnector:
     def send_gradient_to_data_owners(self, data_owners, gradient, model_id, public_key):
 
         args = [self._build_data(data_owner, gradient, model_id, public_key) for data_owner in data_owners]
-        logging.info(gradient)
         self.async_thread_pool.run(executable=self._send_gradient, args=args)
 
     #@optimized_dict_collection_response(optimization=np.asarray, active=True)
@@ -60,7 +59,6 @@ class DataOwnerConnector:
 
     def get_model_metrics_from_validators(self, validators, model_data, weights=None):
         model = weights if weights is not None else model_data.model.weights
-        logging.info(model)
         data = {'model': serialize(model, self.encryption_service, model_data.public_key),
                 'model_type': model_data.model_type,
                 'model_id': model_data.model_id,
@@ -72,9 +70,7 @@ class DataOwnerConnector:
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
         results = [result['diff'] for result in results]
-        logging.info(results)
         results = [deserialize(result, self.encryption_service, model_data.public_key) for result in results]
-        logging.info(results)
         return results
 
     @deserialize_encrypted_server_data()

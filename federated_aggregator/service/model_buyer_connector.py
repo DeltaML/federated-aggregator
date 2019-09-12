@@ -11,7 +11,7 @@ class ModelBuyerConnector:
     def send_result(self, result):
         try:
 
-            url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']["model_id"])
+            url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']["id"])
             payload = result
             # TODO Temporal fix
             payload["first_update"] = False
@@ -29,6 +29,7 @@ class ModelBuyerConnector:
         response = requests.patch(url, json=payload)
         response.raise_for_status()
         logging.info("Response {}".format(response.json()))
+        return  response.json()
 
     def send_encrypted_prediction(self, model, encrypted_prediction):
         """

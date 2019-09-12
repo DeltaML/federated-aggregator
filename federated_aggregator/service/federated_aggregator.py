@@ -1,19 +1,17 @@
-import json
 import logging
+from copy import deepcopy
 from functools import reduce
 from threading import Thread
+
 import numpy as np
-from copy import deepcopy
+from commons.model.model_service import ModelFactory
+
 from commons.operations_utils.functions import serialize, deserialize
 from commons.operations_utils.functions import sum_collection
-from commons.model.model_service import ModelFactory
-from commons.operations_utils.functions import sum_collection
-
-from federated_aggregator.exceptions import EmptyValidatorsException, FederatedTrainerException
+from federated_aggregator.exceptions import EmptyValidatorsException
 from federated_aggregator.models.data_owner_instance import DataOwnerInstance
 from federated_aggregator.models.global_model import GlobalModel
 from federated_aggregator.service.data_owner_connector import DataOwnerConnector
-from federated_aggregator.service.decorators import serialize_encrypted_server_data
 from federated_aggregator.service.model_buyer_connector import ModelBuyerConnector
 
 
@@ -52,7 +50,6 @@ class FederatedAggregator:
         logging.info("process_in_background...")
         func(*args)
 
-
         logging.info("finish process_in_background...")
 
     def process(self, remote_address, data):
@@ -88,6 +85,7 @@ class FederatedAggregator:
         :param linked_data_owners:
         :return: Two lists of data owners. The trainers and the validators-
         """
+        # TODO -> 0.70 to property
         split_index = int(len(linked_data_owners) * 0.70)
         import random
         copy = linked_data_owners[:]
@@ -136,13 +134,9 @@ class FederatedAggregator:
             logging.info('Fished iterations for model {} {}'.format(model_id, model_data))
             model_buyer_data = {
                 'model': {
+                    "status": "FINISHED",
                     'weights': serialize(model_data.model.weights, self.encryption_service, model_data.public_key),
-                    'model_id': model_data.model_id,
-                    'status': model_data.model_status,
-                    'type': model_data.model_type
-                }, 'metrics': {
-                    'mse': model_data.mse,
-                    'partial_MSEs': model_data.partial_MSEs
+                    'id': model_data.model_id
                 }
             }
             self.model_buyer_connector.send_result(model_buyer_data)
@@ -176,14 +170,14 @@ class FederatedAggregator:
         return abs((last_mse - current_mse) / last_mse)
 
     def initialize_global_model(self, data):
-        model = ModelFactory.get_model(data['model_type'])()
-        weights = self.encryption_service.get_deserialized_collection(data["weights"]) if self.active_encryption else data["weights"]
-        model.set_weights(np.asarray(weights))
+        weights = self.encryption_service.get_deserialized_collection(data["weights"]) if self.active_encryption else \
+        data["weights"]
+        model = ModelFactory.get_model(data['model_type'])(weights=np.asarray(weights))
+        # model.set_weights(np.asarray(weights))
         return model
 
     def training_cicle(self, model_data, i):
         gradients, local_trainers = self.get_gradients(model_data)
-        logging.info("Updates: {}".format(gradients))
         partial_models = [self.partial_update_model(deepcopy(model_data), gradients, local_trainers, i)
                           for i in range(len(local_trainers))]
         model_data.model.weights, avg_gradient = self.update_model(model_data, gradients)
@@ -236,7 +230,8 @@ class FederatedAggregator:
 
     def send_partial_result_to_model_buyer(self, model_data, diffs, partial_diffs={}, first_update=False):
         for trainer in partial_diffs:
-            partial_diffs[trainer] = [serialize(diff, self.encryption_service, model_data.public_key) for diff in partial_diffs[trainer]]
+            partial_diffs[trainer] = [serialize(diff, self.encryption_service, model_data.public_key) for diff in
+                                      partial_diffs[trainer]]
         weights = model_data.model.weights
         partial_result = {
             'first_update': first_update,
@@ -267,7 +262,8 @@ class FederatedAggregator:
         :return: Nothing
         """
         logging.info("Send global models")
-        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient.tolist(), model_data.model_id, model_data.public_key)
+        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient,
+                                                               model_data.model_id, model_data.public_key)
 
     def get_gradients(self, model_data):
         """
@@ -299,7 +295,7 @@ class FederatedAggregator:
     def get_model_metrics_from_validators(self, model_data):
         logging.info("Getting global mse")
         diffs_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators,
-                                                                                           model_data)
+                                                                                            model_data)
         return diffs_from_validators
 
     def get_partial_model_metrics_from_validators(self, partial_models, model_data):
@@ -307,7 +303,8 @@ class FederatedAggregator:
         logging.info("Getting partials mses")
         for trainer, model_weights in partial_models:
             logging.info("Calculating mse for model without trainer: {}".format(trainer))
-            diffs = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data, model_weights)
+            diffs = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data,
+                                                                                model_weights)
 
             trainers_mses[trainer] = diffs
         return trainers_mses
@@ -325,7 +322,7 @@ class FederatedAggregator:
                                                             encrypted_prediction=encrypted_prediction)
 
     def serialize_if_activated(self, value):
-        return self.encryption_service.__get_serialized_encrypted_value(value) if self.config[
+        return self.encryption_service.get_serialized_encrypted_value(value) if self.config[
             "ACTIVE_ENCRYPTION"] else value
 
     def are_valid(self, model_id, mse, initial_mse, partial_MSEs, public_key):

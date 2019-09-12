@@ -107,10 +107,15 @@ def get_contributions():
     public_key = data["public_key"]
     model_id = data["model_id"]
     initial_mse = data['initial_MSE']
-    if federated_aggregator.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
+    return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
+    # TODO fix this
+    """
+        if federated_aggregator.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
         return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
     else:
         return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify
+    """
+
 
 
 @app.route('/ping', methods=['POST'])
