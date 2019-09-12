@@ -82,10 +82,10 @@ class DataOwnerConnector:
         data_owner, model_type, weights, model_id, public_key = data
         url = "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id)
         payload = {"model_type": model_type, "weights": self.encryption_service.get_serialized_collection(weights) if self.active_encryption else weights, "public_key": public_key}
-        logging.info("Url: {} payload {}".format(url, payload))
+        logging.info("Url: {}".format(url))
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        logging.info("response {}".format(response.json()))
+        logging.info("response {}".format(response))
         return response.json()
 
     @serialize_encrypted_server_gradient(schema=json.dumps)
@@ -96,7 +96,7 @@ class DataOwnerConnector:
         :return:
         """
         url, payload = data
-        logging.info("Url: {} payload {}".format(url, payload))
+        logging.info("Url: {} ".format(url))
         response = requests.put(url, json=payload)
         response.raise_for_status()
         logging.info("response {}".format(response.json()))
@@ -116,16 +116,19 @@ class DataOwnerConnector:
     @staticmethod
     def _send_post_request_to_data_owner(data):
         url, payload = data
-        logging.info("Url: {} payload {}".format(url, payload))
+        logging.info("Url: {} ".format(url))
         response = requests.post(url, json=payload, timeout=None)
         response.raise_for_status()
-        logging.info("Response: {} ".format(response.json()))
+        logging.info("Response: {} ".format(response))
         return response.json()
 
     @staticmethod
     def _send_put_request_to_data_owner(data):
         url, payload = data
+        logging.info("Url: {} ".format(url))
         response = requests.put(url, json=payload, timeout=None)
+        response.raise_for_status()
+        logging.info("Response: {} ".format(response))
         return response.json()
 
     def send_encrypted_prediction(self, data_owner, encrypted_prediction):
@@ -142,7 +145,7 @@ class DataOwnerConnector:
         url = "http://{}:{}/predictions/{}".format(data_owner.host, self.data_owner_port,
                                                    encrypted_prediction["prediction_id"])
         payload = encrypted_prediction
-        logging.info("Url {} payload".format(url, payload))
+        logging.info("Url {} payload".format(url))
         response = requests.patch(url, json=payload)
         response.raise_for_status()
         logging.info("Response {}".format(response))
