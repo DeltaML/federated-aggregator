@@ -15,20 +15,20 @@ class ModelBuyerConnector:
             payload = result
             # TODO Temporal fix
             payload["first_update"] = False
-            logging.info("url {} payload {}".format(url, payload))
+            logging.info("url {} ".format(url))
             response = requests.put(url, json=payload)
             response.raise_for_status()
-            logging.info("Response {}".format(response.json()))
+            logging.info("Response {}".format(response))
         except Exception as e:
             logging.error(e)
 
     def send_partial_result(self, result):
         url = "http://{}:{}/models/{}".format(self.remote_address, self.model_buyer_port, result['model']['id'])
         payload = result
-        logging.info("url {} payload {}".format(url, payload))
+        logging.info("url {} ".format(url))
         response = requests.patch(url, json=payload)
         response.raise_for_status()
-        logging.info("Response {}".format(response.json()))
+        logging.info("Response {}".format(response))
         return  response.json()
 
     def send_encrypted_prediction(self, model, encrypted_prediction):
