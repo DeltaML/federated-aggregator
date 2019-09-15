@@ -1,59 +1,21 @@
 import logging
+from copy import deepcopy
 from functools import reduce
 from threading import Thread
 
+import numpy as np
+from commons.model.model_service import ModelFactory
+
 from commons.operations_utils.functions import serialize, deserialize
 from commons.operations_utils.functions import sum_collection
-from federated_trainer.models.data_owner_instance import DataOwnerInstance
-from federated_trainer.service.data_owner_connector import DataOwnerConnector
-from federated_trainer.service.model_buyer_connector import ModelBuyerConnector
-from commons.model.model_service import ModelFactory
-import numpy as np
-from copy import deepcopy
+from federated_aggregator.exceptions import EmptyValidatorsException
+from federated_aggregator.models.data_owner_instance import DataOwnerInstance
+from federated_aggregator.models.global_model import GlobalModel
+from federated_aggregator.service.data_owner_connector import DataOwnerConnector
+from federated_aggregator.service.model_buyer_connector import ModelBuyerConnector
 
 
-class GlobalModel:
-    def __init__(self,
-                 buyer_id,
-                 buyer_host,
-                 model_id,
-                 model_type,
-                 model_status,
-                 local_trainers,
-                 validators,
-                 model,
-                 initial_mse,
-                 mse,
-                 public_key,
-                 partial_MSEs,
-                 step):
-        """
-        :param buyer_id: String
-        :param buyer_host:
-        :param model_id: String
-        :param public_key: String
-        :param model_type: String
-        :param local_trainers: List[]
-        :param validators: List[]
-        :param model: LinearRegression
-        """
-        self.buyer_id = buyer_id
-        self.model_id = model_id
-        self.buyer_host = buyer_host
-        self.model_type = model_type
-        self.model_status = model_status
-        self.local_trainers = local_trainers
-        self.validators = validators
-        self.model = model
-        self.initial_mse = initial_mse
-        self.mse = mse
-        self.partial_MSEs = partial_MSEs
-        self.public_key = public_key
-        self.decrypted_mse = None
-        self.gradient_step = step
-
-
-class FederatedTrainer:
+class FederatedAggregator:
     def __init__(self, encryption_service, config):
         """
         :param encryption_service: EncriptionService
@@ -63,8 +25,10 @@ class FederatedTrainer:
         self.encryption_service = encryption_service
         self.config = config
         self.active_encryption = self.config["ACTIVE_ENCRYPTION"]
-        self.data_owner_connector = DataOwnerConnector(self.config["DATA_OWNER_PORT"], encryption_service, self.active_encryption)
-        self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_HOST"], self.config["MODEL_BUYER_PORT"])
+        self.data_owner_connector = DataOwnerConnector(self.config["DATA_OWNER_PORT"], encryption_service,
+                                                       self.active_encryption)
+        self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_HOST"],
+                                                         self.config["MODEL_BUYER_PORT"])
         self.global_models = {}
         self.n_iter = self.config["MAX_ITERATIONS"]
         self.n_iter_partial_res = self.config["ITERS_UNTIL_PARTIAL_RESULT"]
@@ -83,11 +47,14 @@ class FederatedTrainer:
         return self.data_owner_connector.send_requirements_to_data_owners(list(self.data_owners.values()), data)
 
     def async_server_processing(self, func, *args):
-        result = func(*args)
-        self.model_buyer_connector.send_result(result)
+        logging.info("process_in_background...")
+        func(*args)
+
+        logging.info("finish process_in_background...")
 
     def process(self, remote_address, data):
-        Thread(target=self.async_server_processing, args=self._build_async_processing_data(data, remote_address)).start()
+        Thread(target=self.async_server_processing,
+               args=self._build_async_processing_data(data, remote_address)).start()
 
     def _build_async_processing_data(self, data, remote_address):
         data["remote_address"] = remote_address
@@ -118,11 +85,12 @@ class FederatedTrainer:
         :param linked_data_owners:
         :return: Two lists of data owners. The trainers and the validators-
         """
+        # TODO -> 0.70 to property
         split_index = int(len(linked_data_owners) * 0.70)
         import random
         copy = linked_data_owners[:]
         random.shuffle(copy)
-        local_trainers, validators = copy[:split_index+1], copy[split_index+1:] or []
+        local_trainers, validators = copy[:split_index + 1], copy[split_index + 1:] or []
         logging.info("LocalTrainers: {}".format(list(map(lambda x: x.id, local_trainers))))
         logging.info("Validators: {}".format(list(map(lambda x: x.id, validators))))
         return local_trainers, validators
@@ -130,43 +98,70 @@ class FederatedTrainer:
     def federated_learning(self, data):
         logging.info("Init federated_learning")
         model_id = data['model_id']
-        linked_data_owners = self._link_data_owners_to_model(data)
-        local_trainers, validators = self.split_data_owners(linked_data_owners)
-        self.encryption_service.set_public_key(data["public_key"])
-        model = self.initialize_global_model(data)
-        self.global_models[model_id] = GlobalModel(model_id=model_id,
-                                                   buyer_id=data["model_buyer_id"],
-                                                   buyer_host=data["remote_address"],
-                                                   model_type=data['model_type'],
-                                                   model_status=data["status"],
-                                                   local_trainers=local_trainers,
-                                                   validators=validators,
-                                                   model=model,
-                                                   initial_mse=None,
-                                                   mse=None,
-                                                   public_key=data["public_key"],
-                                                   partial_MSEs=None,
-                                                   step=data["step"])
-        logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
-        model_data = self.global_models[model_id]
-        diffs = self.get_model_metrics_from_validators(model_data)
-        model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
-        mses = [np.mean(np.asarray(diff)**2) for diff in model_update['diffs']]
-        model_data.initial_mse = np.mean(mses)
-        model_data.decrypted_mse = model_data.initial_mse
-        self.data_owner_connector.send_mses(validators, model_data, mses)
-        for i in range(1, self.n_iter + 1):
-            last_mse = model_data.decrypted_mse
-            logging.info(last_mse)
-            model_data = self.training_cicle(model_data, i)
-            if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0:
-                break
-        return {
-            'model': {
-                'weights': serialize(model_data.model.weights, self.encryption_service, model_data.public_key),
-                'id': model_data.model_id
+        try:
+            linked_data_owners = self._link_data_owners_to_model(data)
+            self.validate_linked_data_owners(linked_data_owners, model_id)
+            local_trainers, validators = self.split_data_owners(linked_data_owners)
+            self.encryption_service.set_public_key(data["public_key"])
+            model = self.initialize_global_model(data)
+            self.global_models[model_id] = GlobalModel(model_id=model_id,
+                                                       buyer_id=data["model_buyer_id"],
+                                                       buyer_host=data["remote_address"],
+                                                       model_type=data['model_type'],
+                                                       model_status=data["status"],
+                                                       local_trainers=local_trainers,
+                                                       validators=validators,
+                                                       model=model,
+                                                       initial_mse=None,
+                                                       mse=None,
+                                                       public_key=data["public_key"],
+                                                       partial_MSEs=None,
+                                                       step=data["step"])
+            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
+            model_data = self.global_models[model_id]
+            diffs = self.get_model_metrics_from_validators(model_data)
+            model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
+            mses = [np.mean(np.asarray(diff) ** 2) for diff in model_update['diffs']]
+            model_data.initial_mse = np.mean(mses)
+            model_data.decrypted_mse = model_data.initial_mse
+            self.data_owner_connector.send_mses(validators, model_data, mses)
+            for i in range(1, self.n_iter + 1):
+                last_mse = model_data.decrypted_mse
+                model_data = self.training_cicle(model_data, i)
+                if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0:
+                    logging.info("BREAKING")
+                    break
+            logging.info('Fished iterations for model {} {}'.format(model_id, model_data))
+            model_buyer_data = {
+                'model': {
+                    "status": "FINISHED",
+                    'weights': serialize(model_data.model.weights, self.encryption_service, model_data.public_key),
+                    'id': model_data.model_id
+                }
+            }
+            self.model_buyer_connector.send_result(model_buyer_data)
+        except Exception as e:
+            logging.error(e)
+            self.send_error_to_model_buyer(model_id)
+
+    def validate_linked_data_owners(self, linked_data_owners, model_id):
+        if len(linked_data_owners) == 0:
+            logging.error("Invalid Number of linked data owner")
+            raise EmptyValidatorsException(model_id)
+
+    def send_error_to_model_buyer(self, model_id):
+        """
+        TODO enumerate errors
+        :param model_id:
+        :return:
+        """
+        error_data = {
+            "model": {
+                'model_id': model_id,
+                'status': "ERROR"
             }
         }
+        self.model_buyer_connector.send_result(error_data)
 
     def has_converged(self, current_mse, last_mse):
         return last_mse is not None and current_mse is not None and self.loss_improvement(last_mse, current_mse) < 0.001
@@ -175,14 +170,14 @@ class FederatedTrainer:
         return abs((last_mse - current_mse) / last_mse)
 
     def initialize_global_model(self, data):
-        model = ModelFactory.get_model(data['model_type'])()
-        weights = self.encryption_service.get_deserialized_collection(data["weights"]) if self.active_encryption else data["weights"]
-        model.set_weights(np.asarray(weights))
+        weights = self.encryption_service.get_deserialized_collection(data["weights"]) if self.active_encryption else \
+        data["weights"]
+        model = ModelFactory.get_model(data['model_type'])(weights=np.asarray(weights))
+        # model.set_weights(np.asarray(weights))
         return model
 
     def training_cicle(self, model_data, i):
         gradients, local_trainers = self.get_gradients(model_data)
-        logging.info("Updates: {}".format(gradients))
         partial_models = [self.partial_update_model(deepcopy(model_data), gradients, local_trainers, i)
                           for i in range(len(local_trainers))]
         model_data.model.weights, avg_gradient = self.update_model(model_data, gradients)
@@ -235,7 +230,8 @@ class FederatedTrainer:
 
     def send_partial_result_to_model_buyer(self, model_data, diffs, partial_diffs={}, first_update=False):
         for trainer in partial_diffs:
-            partial_diffs[trainer] = [serialize(diff, self.encryption_service, model_data.public_key) for diff in partial_diffs[trainer]]
+            partial_diffs[trainer] = [serialize(diff, self.encryption_service, model_data.public_key) for diff in
+                                      partial_diffs[trainer]]
         weights = model_data.model.weights
         partial_result = {
             'first_update': first_update,
@@ -266,7 +262,8 @@ class FederatedTrainer:
         :return: Nothing
         """
         logging.info("Send global models")
-        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient, model_data.model_id, model_data.public_key)
+        self.data_owner_connector.send_gradient_to_data_owners(model_data.local_trainers, gradient,
+                                                               model_data.model_id, model_data.public_key)
 
     def get_gradients(self, model_data):
         """
@@ -274,7 +271,9 @@ class FederatedTrainer:
         :return: the gradients calculated after a gradient descent step in the data owners, and the data owners that
         performed such calculation.
         """
-        gradients, owners = self.data_owner_connector.get_gradient_from_data_owners(model_data)
+        results = self.data_owner_connector.get_gradient_from_data_owners(model_data)
+        gradients = np.asarray(list(map(lambda x: x['update'], results)))
+        owners = list(map(lambda x: x['data_owner_id'], results))
         return gradients, owners
 
     def federated_averaging(self, updates, model_data):
@@ -295,7 +294,8 @@ class FederatedTrainer:
 
     def get_model_metrics_from_validators(self, model_data):
         logging.info("Getting global mse")
-        diffs_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data)
+        diffs_from_validators = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators,
+                                                                                            model_data)
         return diffs_from_validators
 
     def get_partial_model_metrics_from_validators(self, partial_models, model_data):
@@ -303,7 +303,9 @@ class FederatedTrainer:
         logging.info("Getting partials mses")
         for trainer, model_weights in partial_models:
             logging.info("Calculating mse for model without trainer: {}".format(trainer))
-            diffs = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data, model_weights)
+            diffs = self.data_owner_connector.get_model_metrics_from_validators(model_data.validators, model_data,
+                                                                                model_weights)
+
             trainers_mses[trainer] = diffs
         return trainers_mses
 
@@ -320,14 +322,15 @@ class FederatedTrainer:
                                                             encrypted_prediction=encrypted_prediction)
 
     def serialize_if_activated(self, value):
-        return self.encryption_service.__get_serialized_encrypted_value(value) if self.config["ACTIVE_ENCRYPTION"] else value
+        return self.encryption_service.get_serialized_encrypted_value(value) if self.config[
+            "ACTIVE_ENCRYPTION"] else value
 
     def are_valid(self, model_id, mse, initial_mse, partial_MSEs, public_key):
         self.encryption_service.set_public_key(public_key)
         original_partial_MSEs = self.global_models[model_id].partial_MSEs
         encrypted_mse = self.serialize_if_activated(mse)
         encrypted_partial_MSEs = dict([(data_owner, self.serialize_if_activated(partial_MSE))
-                                  for data_owner, partial_MSE in partial_MSEs.items()])
+                                       for data_owner, partial_MSE in partial_MSEs.items()])
         mse_validated = self.compare_mses(encrypted_mse, self.global_models[model_id].mse)
         partial_MSEs_checks_out = self.compare_partial_mses(encrypted_partial_MSEs, original_partial_MSEs)
         return mse_validated and partial_MSEs_checks_out

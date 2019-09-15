@@ -3,7 +3,7 @@ import os
 from flask import Flask, request, jsonify
 
 from commons.encryption.encryption_service import EncryptionService
-from federated_trainer.service.federated_trainer import FederatedTrainer
+from federated_aggregator.service.federated_aggregator import FederatedAggregator
 
 from logging.config import dictConfig
 
@@ -39,8 +39,8 @@ def create_app():
 
 app = create_app()
 encryption_service = EncryptionService(is_active=app.config["ACTIVE_ENCRYPTION"])
-federated_trainer = FederatedTrainer(encryption_service=encryption_service, config=app.config)
-logging.info("federated_trainer running")
+federated_aggregator = FederatedAggregator(encryption_service=encryption_service, config=app.config)
+logging.info("federated_aggregator running")
 
 
 @app.errorhandler(Exception)
@@ -63,13 +63,13 @@ def register_data_owner():
     # Json contiene url y puerto a donde esta el cliente que se esta logueando
     data = request.get_json()
     data["host"], data["port"] = request.environ['REMOTE_ADDR'], request.environ['REMOTE_PORT']
-    response = federated_trainer.register_data_owner(data)
+    response = federated_aggregator.register_data_owner(data)
     return jsonify(response)
 
 
 @app.route('/dataowner', methods=['GET'])
 def get_data_owners():
-    return jsonify([str(data_owner) for data_owner in federated_trainer.data_owners])
+    return jsonify([str(data_owner) for data_owner in federated_aggregator.data_owners])
 
 
 @app.route('/model', methods=['POST'])
@@ -78,7 +78,7 @@ def train_model_async():
     logging.info("Initializing async model training according to request {}".format(data))
     logging.info("host {} port {}".format(request.environ['REMOTE_ADDR'], request.environ['REMOTE_PORT']))
     # Validate model type
-    federated_trainer.process(request.environ['REMOTE_ADDR'], data)
+    federated_aggregator.process(request.environ['REMOTE_ADDR'], data)
     return jsonify(200)
 
 
@@ -86,7 +86,7 @@ def train_model_async():
 def post_prediction():
     data = request.get_json()
     logging.info("Data {}".format(data))
-    federated_trainer.send_prediction_to_buyer(data)
+    federated_aggregator.send_prediction_to_buyer(data)
     return jsonify(200), 200
 
 
@@ -94,7 +94,7 @@ def post_prediction():
 def patch_prediction(prediction_id):
     data = request.get_json()
     logging.info("Data {}".format(data))
-    federated_trainer.send_prediction_to_data_owner(data)
+    federated_aggregator.send_prediction_to_data_owner(data)
     return jsonify("pong")
 
 
@@ -107,10 +107,15 @@ def get_contributions():
     public_key = data["public_key"]
     model_id = data["model_id"]
     initial_mse = data['initial_MSE']
-    if True: #federated_trainer.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
-        return jsonify(federated_trainer.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
+    return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
+    # TODO fix this
+    """
+        if federated_aggregator.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
+        return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
     else:
         return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify
+    """
+
 
 
 @app.route('/ping', methods=['POST'])

@@ -18,8 +18,8 @@ install:
 # This is the script that enables travis to run the tests
 # There are many ways to do dependeing on how you want travis to run and get you coverage
 script: true
-  - coverage run --source=. -m unittest discover -s federated_trainer/tests/
-  - pylint --output-format=text federated_trainer/
+  - coverage run --source=. -m unittest discover -s federated_aggregator/tests/
+  - pylint --output-format=text federated_aggregator/
 
 
 

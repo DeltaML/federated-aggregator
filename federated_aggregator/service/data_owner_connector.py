@@ -5,9 +5,9 @@ import numpy as np
 import requests
 
 from commons.operations_utils.functions import serialize, deserialize
-from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument, optimized_dict_collection_response
+from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument
 from commons.utils.async_thread_pool_executor import AsyncThreadPoolExecutor
-from federated_trainer.service.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
+from federated_aggregator.service.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
 
 
 class DataOwnerConnector:
@@ -21,10 +21,9 @@ class DataOwnerConnector:
     def send_gradient_to_data_owners(self, data_owners, gradient, model_id, public_key):
 
         args = [self._build_data(data_owner, gradient, model_id, public_key) for data_owner in data_owners]
-        logging.info(gradient)
         self.async_thread_pool.run(executable=self._send_gradient, args=args)
 
-    @optimized_dict_collection_response(optimization=np.asarray, active=True)
+    #@optimized_dict_collection_response(optimization=np.asarray, active=True)
     def get_gradient_from_data_owners(self, model_data):
         args = [
             (trainer, model_data.model_type, model_data.model.weights, model_data.model_id, model_data.public_key)
@@ -60,7 +59,6 @@ class DataOwnerConnector:
 
     def get_model_metrics_from_validators(self, validators, model_data, weights=None):
         model = weights if weights is not None else model_data.model.weights
-        logging.info(model)
         data = {'model': serialize(model, self.encryption_service, model_data.public_key),
                 'model_type': model_data.model_type,
                 'model_id': model_data.model_id,
@@ -72,9 +70,7 @@ class DataOwnerConnector:
         ]
         results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
         results = [result['diff'] for result in results]
-        logging.info(results)
         results = [deserialize(result, self.encryption_service, model_data.public_key) for result in results]
-        logging.info(results)
         return results
 
     @deserialize_encrypted_server_data()
@@ -86,8 +82,10 @@ class DataOwnerConnector:
         data_owner, model_type, weights, model_id, public_key = data
         url = "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id)
         payload = {"model_type": model_type, "weights": self.encryption_service.get_serialized_collection(weights) if self.active_encryption else weights, "public_key": public_key}
-        logging.info(payload)
+        logging.info("Url: {}".format(url))
         response = requests.post(url, json=payload)
+        response.raise_for_status()
+        logging.info("response {}".format(response))
         return response.json()
 
     @serialize_encrypted_server_gradient(schema=json.dumps)
@@ -98,12 +96,18 @@ class DataOwnerConnector:
         :return:
         """
         url, payload = data
-        logging.info(payload)
-        requests.put(url, json=payload)
+        logging.info("Url: {} ".format(url))
+        response = requests.put(url, json=payload)
+        response.raise_for_status()
+        logging.info("response {}".format(response.json()))
 
     @deserialize_encrypted_server_data_2()
     def _send_get_request_to_data_owner(self, url):
-        return requests.get(url).json()
+        logging.info("Url: {} ".format(url))
+        response = requests.get(url).json()
+        response.raise_for_status()
+        logging.info("Response {}".format(response))
+        return response
 
     @normalize_optimized_collection_argument(active=True)
     def _build_data(self, data_owner, gradient, model_id, public_key):
@@ -112,13 +116,19 @@ class DataOwnerConnector:
     @staticmethod
     def _send_post_request_to_data_owner(data):
         url, payload = data
+        logging.info("Url: {} ".format(url))
         response = requests.post(url, json=payload, timeout=None)
+        response.raise_for_status()
+        logging.info("Response: {} ".format(response))
         return response.json()
 
     @staticmethod
     def _send_put_request_to_data_owner(data):
         url, payload = data
+        logging.info("Url: {} ".format(url))
         response = requests.put(url, json=payload, timeout=None)
+        response.raise_for_status()
+        logging.info("Response: {} ".format(response))
         return response.json()
 
     def send_encrypted_prediction(self, data_owner, encrypted_prediction):
@@ -134,5 +144,9 @@ class DataOwnerConnector:
         """
         url = "http://{}:{}/predictions/{}".format(data_owner.host, self.data_owner_port,
                                                    encrypted_prediction["prediction_id"])
-        logging.info("Url {}".format(url))
-        requests.patch(url, json=encrypted_prediction)
+        payload = encrypted_prediction
+        logging.info("Url {} payload".format(url))
+        response = requests.patch(url, json=payload)
+        response.raise_for_status()
+        logging.info("Response {}".format(response))
+        return response

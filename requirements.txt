@@ -1,4 +1,3 @@
-wheel
 codecov==2.0.15
 coverage==4.4.2
 flask==1.0.3
@@ -12,5 +11,4 @@ sqlalchemy==1.3.0
 scikit-learn==0.21.2
 pandas==0.24.2
 pylint==2.3.1
-DeltaML-commons==0.8.4
-
+DeltaML-commons==0.9.7
