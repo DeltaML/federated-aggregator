@@ -293,7 +293,8 @@ class FederatedAggregator(metaclass=Singleton):
         contributions_sum = sum(contributions.values())
         for data_owner in partial_MSEs:
             contributions[data_owner] = (contributions[data_owner]) / contributions_sum
-        return model_id, improvement, contributions
+        return {'model_id': model_id, 'improvement': improvement, 'contributions': contributions}
+        #return model_id, improvement, contributions
 
 
 
