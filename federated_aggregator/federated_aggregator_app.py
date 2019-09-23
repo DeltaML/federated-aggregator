@@ -1,124 +1,43 @@
 import logging
 import os
-from flask import Flask, request, jsonify
-
-from commons.encryption.encryption_service import EncryptionService
-from federated_aggregator.service.federated_aggregator import FederatedAggregator
-
 from logging.config import dictConfig
 
-dictConfig({
-    'version': 1,
-    'formatters': {'default': {
-        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
-    }},
-    'handlers': {'wsgi': {
-        'class': 'logging.StreamHandler',
-        'stream': 'ext://flask.logging.wsgi_errors_stream',
-        'formatter': 'default'
-    }},
-    'root': {
-        'level': 'INFO',
-        'handlers': ['wsgi']
-    }
-})
+from commons.encryption.encryption_service import EncryptionService
+from flask import Flask
+
+from federated_aggregator.config.logging_config import PROD_LOGGING_CONFIG, DEV_LOGGING_CONFIG
+from federated_aggregator.resources import api
+from federated_aggregator.services.data_owner_service import DataOwnerService
+from federated_aggregator.services.federated_aggregator import FederatedAggregator
 
 
 def create_app():
     # create and configure the app
     flask_app = Flask(__name__)
-    # load the instance config
+    if 'ENV_PROD' in os.environ and os.environ['ENV_PROD']:
+        flask_app.config.from_pyfile("config/prod/app_config.py")
+        dictConfig(PROD_LOGGING_CONFIG)
+        logging.info("Using prod config")
+    else:
+        dictConfig(DEV_LOGGING_CONFIG)
+        flask_app.config.from_pyfile("config/dev/app_config.py")
+        logging.info("Using dev config")
     # ensure the instance folder exists
     try:
         os.makedirs(flask_app.instance_path)
     except OSError:
         pass
-    flask_app.config.from_pyfile('config.py')
     return flask_app
 
 
 app = create_app()
+api.init_app(app)
 encryption_service = EncryptionService(is_active=app.config["ACTIVE_ENCRYPTION"])
-federated_aggregator = FederatedAggregator(encryption_service=encryption_service, config=app.config)
+data_owner_service = DataOwnerService()
+federated_aggregator = FederatedAggregator()
+data_owner_service.init(encryption_service, app.config)
+federated_aggregator.init(encryption_service=encryption_service,
+                          data_owner_service=data_owner_service,
+                          config=app.config)
+
 logging.info("federated_aggregator running")
-
-
-@app.errorhandler(Exception)
-def handle_error(error):
-    message = [str(x) for x in error.args]
-    status_code = error.status_code
-    success = False
-    response = {
-        'success': success,
-        'error': {
-            'type': error.__class__.__name__,
-            'message': message
-        }
-    }
-    return jsonify(response), status_code
-
-
-@app.route('/dataowner', methods=['POST'])
-def register_data_owner():
-    # Json contiene url y puerto a donde esta el cliente que se esta logueando
-    data = request.get_json()
-    data["host"], data["port"] = request.environ['REMOTE_ADDR'], request.environ['REMOTE_PORT']
-    response = federated_aggregator.register_data_owner(data)
-    return jsonify(response)
-
-
-@app.route('/dataowner', methods=['GET'])
-def get_data_owners():
-    return jsonify([str(data_owner) for data_owner in federated_aggregator.data_owners])
-
-
-@app.route('/model', methods=['POST'])
-def train_model_async():
-    data = request.get_json()
-    logging.info("Initializing async model training according to request {}".format(data))
-    logging.info("host {} port {}".format(request.environ['REMOTE_ADDR'], request.environ['REMOTE_PORT']))
-    # Validate model type
-    federated_aggregator.process(request.environ['REMOTE_ADDR'], data)
-    return jsonify(200)
-
-
-@app.route('/prediction', methods=['POST'])
-def post_prediction():
-    data = request.get_json()
-    logging.info("Data {}".format(data))
-    federated_aggregator.send_prediction_to_buyer(data)
-    return jsonify(200), 200
-
-
-@app.route('/prediction/<prediction_id>', methods=['PATCH'])
-def patch_prediction(prediction_id):
-    data = request.get_json()
-    logging.info("Data {}".format(data))
-    federated_aggregator.send_prediction_to_data_owner(data)
-    return jsonify("pong")
-
-
-@app.route('/contributions', methods=['POST'])
-def get_contributions():
-    data = request.get_json()
-    logging.info("Data {}".format(data))
-    mse = data['MSE']
-    partial_MSEs = data["partial_MSEs"]
-    public_key = data["public_key"]
-    model_id = data["model_id"]
-    initial_mse = data['initial_MSE']
-    return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
-    # TODO fix this
-    """
-        if federated_aggregator.are_valid(model_id, mse, initial_mse, partial_MSEs, public_key):
-        return jsonify(federated_aggregator.calculate_contributions(model_id, mse, initial_mse, partial_MSEs))
-    else:
-        return jsonify({"ERROR": "Tried to falsify metrics"})  # Case when the model buyer tried to falsify
-    """
-
-
-
-@app.route('/ping', methods=['POST'])
-def ping():
-    logging.info("Data {}".format(request.get_json()))
-    return jsonify("pong")
