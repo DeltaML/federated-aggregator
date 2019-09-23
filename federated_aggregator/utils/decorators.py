@@ -1,11 +1,8 @@
-import logging
-
 def deserialize_encrypted_server_data():
     def wrap(f):
         def wrapped_deserialize_encrypted_server_data(*args):
             service = args[0]
             result = f(*args)
-            logging.info(args)
             result['update'] = service.encryption_service.get_deserialized_collection(result['update']) if service.active_encryption else result['update']
             return result
         return wrapped_deserialize_encrypted_server_data

@@ -7,7 +7,7 @@ import requests
 from commons.operations_utils.functions import serialize, deserialize
 from commons.decorators.decorators import optimized_collection_response, normalize_optimized_collection_argument
 from commons.utils.async_thread_pool_executor import AsyncThreadPoolExecutor
-from federated_aggregator.service.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
+from federated_aggregator.utils.decorators import deserialize_encrypted_server_data, serialize_encrypted_server_gradient, deserialize_encrypted_server_data_2
 
 
 class DataOwnerConnector:
@@ -99,7 +99,7 @@ class DataOwnerConnector:
         logging.info("Url: {} ".format(url))
         response = requests.put(url, json=payload)
         response.raise_for_status()
-        logging.info("response {}".format(response.json()))
+        logging.info("response {}".format(response))
 
     @deserialize_encrypted_server_data_2()
     def _send_get_request_to_data_owner(self, url):
