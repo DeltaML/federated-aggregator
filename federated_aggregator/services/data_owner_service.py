@@ -41,10 +41,10 @@ class DataOwnerService(metaclass=Singleton):
     def get_data_owners(self):
         return list(self.data_owners.values())
 
-    def send_requirements_to_data_owner(self, data):
+    def send_requirements(self, data):
         return self.data_owner_connector.send_requirements_to_data_owners(list(self.data_owners.values()), data)
 
-    def link_data_owners_to_model(self, data):
+    def get_linked_data_owners_to_model(self, data):
         """
         Recevies a data structure that contains the requirements over the data needed for training the model.
         Sends these requirements to the data owners. They respond each with a true if they have data that complies with
@@ -54,9 +54,9 @@ class DataOwnerService(metaclass=Singleton):
         :return:
         """
         linked_data_owners = []
-        owners_with_data = self.send_requirements_to_data_owner(data)
+        owners_with_data = self.data_owner_connector.get_linked_data_owners(list(self.data_owners.values()), data['model_id'])
         for data_owner_link in owners_with_data:
-            if (data['model_id'] == data_owner_link['model_id']) and (data_owner_link['has_dataset']):
+            if (data['model_id'] == data_owner_link['model_id']) and (data_owner_link['linked']):
                 data_owner_key = data_owner_link['data_owner_id']
                 linked_data_owners.append(self.data_owners[data_owner_key])
         return linked_data_owners

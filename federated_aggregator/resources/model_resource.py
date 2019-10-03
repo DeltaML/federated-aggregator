@@ -17,6 +17,10 @@ model_schema = api.model(name='Model', model={
     'mse': fields.Float(required=True, description='Current mse')
 })
 
+link = api.model(name='Link', model={
+    'model_id': fields.String(required=True, description='Model id'),
+    'data_owner_id': fields.String(required=True, description='DataOwner id')
+})
 
 @api.route('', endpoint='model_resources_ep')
 class ModelResources(Resource):
@@ -34,3 +38,13 @@ class ModelResources(Resource):
     def get(self):
         logging.info("Get models")
         return FederatedAggregator().get_models()
+
+
+@api.route('/<model_id>/accept', endpoint='model_resources_ep')
+class ModelResources(Resource):
+
+    @api.doc('Register data owner with data for training')
+    @api.marshal_with(link, code=200)
+    def post(self):
+        data = request.get_json()
+        FederatedAggregator().link_data_owner_to_model(data['model_id'], data['data_owner_id'])

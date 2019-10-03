@@ -61,30 +61,39 @@ class FederatedAggregator(metaclass=Singleton):
         data["remote_address"] = remote_address
         return self.federated_learning_wrapper, data
 
-    def federated_learning(self, data):
+    def federated_learning_first_phase(self, data):
+        model_id = data['model_id']
+        self.data_owner_service.send_requirementsl(data)
+        self.encryption_service.set_public_key(data["public_key"])
+        model = self.initialize_global_model(data)
+        self.global_models[model_id] = GlobalModel(model_id=model_id,
+                                                   buyer_id=data["model_buyer_id"],
+                                                   buyer_host=data["remote_address"],
+                                                   model_type=data['model_type'],
+                                                   model_status=data["status"],
+                                                   data_owners=[],
+                                                   local_trainers=[],
+                                                   validators=[],
+                                                   model=model,
+                                                   initial_mse=None,
+                                                   mse=None,
+                                                   public_key=data["public_key"],
+                                                   partial_MSEs=None,
+                                                   step=data["step"])
+
+    def link_data_owner_to_model(self, model_id, data_owner_id):
+        self.global_models[model_id].data_owners.append(data_owner_id)
+
+    def federated_learning_second_phase(self, data):
         logging.info("Init federated_learning")
         model_id = data['model_id']
         try:
-            linked_data_owners = self.data_owner_service.link_data_owners_to_model(data)
-            self.validate_linked_data_owners(linked_data_owners, model_id)
-            local_trainers, validators = self.split_data_owners(linked_data_owners)
-            self.encryption_service.set_public_key(data["public_key"])
-            model = self.initialize_global_model(data)
-            self.global_models[model_id] = GlobalModel(model_id=model_id,
-                                                       buyer_id=data["model_buyer_id"],
-                                                       buyer_host=data["remote_address"],
-                                                       model_type=data['model_type'],
-                                                       model_status=data["status"],
-                                                       local_trainers=local_trainers,
-                                                       validators=validators,
-                                                       model=model,
-                                                       initial_mse=None,
-                                                       mse=None,
-                                                       public_key=data["public_key"],
-                                                       partial_MSEs=None,
-                                                       step=data["step"])
-            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
             model_data = self.global_models[model_id]
+            self.validate_linked_data_owners(model_data.data_owners, model_id)
+            local_trainers, validators = self.split_data_owners(model_data.data_owners)
+            model_data.local_trainers = local_trainers
+            model_data.validators = validators
+            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
             model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
             mses = [np.mean(np.asarray(diff) ** 2) for diff in model_update['diffs']]
