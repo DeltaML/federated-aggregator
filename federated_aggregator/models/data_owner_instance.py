@@ -1,6 +1,7 @@
 class DataOwnerInstance(object):
     def __init__(self, data):
         self.id = data["id"]
+        self.address = data["address"]
         self.host = data["host"]
         self.port = data["port"]
 

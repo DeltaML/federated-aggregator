@@ -9,6 +9,7 @@ from commons.model.model_service import ModelFactory
 from commons.operations_utils.functions import serialize, deserialize
 from commons.operations_utils.functions import sum_collection
 from commons.utils.singleton import Singleton
+from commons.web3.delta_contracts import FederatedAggregatorContract
 
 from federated_aggregator.connectors.model_buyer_connector import ModelBuyerConnector
 from federated_aggregator.exceptions.exceptions import EmptyValidatorsException
@@ -18,23 +19,31 @@ from federated_aggregator.models.global_model import GlobalModel
 class FederatedAggregator(metaclass=Singleton):
     def __init__(self):
         self.encryption_service = None
+        self.data_owner_service = None
+        self.smart_contract = None
         self.config = None
+        self.eth_address = None
         self.active_encryption = None
         self.model_buyer_connector = None
         self.global_models = {}
         self.split_coefficient = None
         self.n_iter = None
         self.n_iter_partial_res = None
-        self.data_owner_service = None
 
-    def init(self, encryption_service, data_owner_service, config):
+    def init(self, encryption_service, data_owner_service, w3_service, config):
         """
+        :param w3_service:
         :param data_owner_service:
         :param encryption_service: EncriptionService
         :param config: Dict[String, Any]
         """
-        self.encryption_service = encryption_service
         self.config = config
+        self.eth_address = self.config["FEDERATED_AGGREGATOR_ADDRESS"]
+        self.encryption_service = encryption_service
+        self.data_owner_service = data_owner_service
+        self.smart_contract = FederatedAggregatorContract(
+            contract=w3_service.build_contract(abi_path=self.config["ABI_PATH"],
+                                               address=self.config["CONTRACT_ADDRESS"]))
         self.active_encryption = self.config["ACTIVE_ENCRYPTION"]
         self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_HOST"],
                                                          self.config["MODEL_BUYER_PORT"])
@@ -42,7 +51,6 @@ class FederatedAggregator(metaclass=Singleton):
         self.split_coefficient = self.config["SPLIT_COEFFICIENT"]
         self.n_iter = self.config["MAX_ITERATIONS"]
         self.n_iter_partial_res = self.config["ITERS_UNTIL_PARTIAL_RESULT"]
-        self.data_owner_service = data_owner_service
 
     def get_models(self):
         return list(self.global_models.values())
@@ -83,6 +91,8 @@ class FederatedAggregator(metaclass=Singleton):
                                                        public_key=data["public_key"],
                                                        partial_MSEs=None,
                                                        step=data["step"])
+            # Init smart contract
+            self.init_contract(model_id, data["model_buyer_address"], local_trainers, validators)
             logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
             model_data = self.global_models[model_id]
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
@@ -109,6 +119,23 @@ class FederatedAggregator(metaclass=Singleton):
         except Exception as e:
             logging.error(e)
             self.send_error_to_model_buyer(model_id)
+
+    def init_contract(self, model_id, model_buyer, trainers, validators):
+        """
+        Receives a data to add the participants in the smart contract and init new model to train
+        :param model_id:
+        :param model_buyer:
+        :param trainers:
+        :param validators:
+        :return:
+        """
+        logging.info("Init contract")
+        trainers_address = [trainer.address for trainer in trainers]
+        validators_address = [validator.address for validator in validators]
+        [self.smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
+        self.smart_contract.set_federated_aggregator(self.eth_address)
+        self.smart_contract.set_model_buyer(model_buyer.address)
+        self.smart_contract.new_model(model_id, validators_address, trainers_address, model_buyer.address)
 
     def split_data_owners(self, linked_data_owners):
         """
@@ -294,7 +321,4 @@ class FederatedAggregator(metaclass=Singleton):
         for data_owner in partial_MSEs:
             contributions[data_owner] = (contributions[data_owner]) / contributions_sum
         return {'model_id': model_id, 'improvement': improvement, 'contributions': contributions}
-        #return model_id, improvement, contributions
-
-
-
+        # return model_id, improvement, contributions
