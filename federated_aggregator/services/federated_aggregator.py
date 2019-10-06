@@ -63,30 +63,38 @@ class FederatedAggregator(metaclass=Singleton):
 
     def federated_learning_first_phase(self, data):
         model_id = data['model_id']
-        self.data_owner_service.send_requirementsl(data)
-        self.encryption_service.set_public_key(data["public_key"])
-        model = self.initialize_global_model(data)
-        self.global_models[model_id] = GlobalModel(model_id=model_id,
-                                                   buyer_id=data["model_buyer_id"],
-                                                   buyer_host=data["remote_address"],
-                                                   model_type=data['model_type'],
-                                                   model_status=data["status"],
-                                                   data_owners=[],
-                                                   local_trainers=[],
-                                                   validators=[],
-                                                   model=model,
-                                                   initial_mse=None,
-                                                   mse=None,
-                                                   public_key=data["public_key"],
-                                                   partial_MSEs=None,
-                                                   step=data["step"])
+        try:
+            self.data_owner_service.send_requirements(data)
+            self.encryption_service.set_public_key(data["public_key"])
+            model = self.initialize_global_model(data)
+            self.global_models[model_id] = GlobalModel(model_id=model_id,
+                                                       buyer_id=data["model_buyer_id"],
+                                                       buyer_host=data["remote_address"],
+                                                       model_type=data['model_type'],
+                                                       model_status=data["status"],
+                                                       data_owners=[],
+                                                       local_trainers=[],
+                                                       validators=[],
+                                                       model=model,
+                                                       initial_mse=None,
+                                                       mse=None,
+                                                       public_key=data["public_key"],
+                                                       partial_MSEs=None,
+                                                       step=data["step"])
+        except Exception as e:
+            logging.error(e)
+            self.send_error_to_model_buyer(model_id)
 
     def link_data_owner_to_model(self, model_id, data_owner_id):
-        self.global_models[model_id].data_owners.append(data_owner_id)
+        linked_data_owners = self.global_models[model_id].data_owners
+        if linked_data_owners < self.config['MIN_DATA_OWNERS']:
+            if data_owner_id in self.data_owner_service.data_owners:
+                linked_data_owners.append(self.data_owner_service.data_owners[data_owner_id])
+        else:
+            self.federated_learning_second_phase(model_id)
 
-    def federated_learning_second_phase(self, data):
+    def federated_learning_second_phase(self, model_id):
         logging.info("Init federated_learning")
-        model_id = data['model_id']
         try:
             model_data = self.global_models[model_id]
             self.validate_linked_data_owners(model_data.data_owners, model_id)
@@ -246,7 +254,7 @@ class FederatedAggregator(metaclass=Singleton):
         return model_update
 
     def federated_learning_wrapper(self, data):
-        return self.federated_learning(data)
+        return self.federated_learning_first_phase(data)
 
     def federated_averaging(self, updates, model_data):
         """
@@ -303,7 +311,5 @@ class FederatedAggregator(metaclass=Singleton):
         for data_owner in partial_MSEs:
             contributions[data_owner] = (contributions[data_owner]) / contributions_sum
         return {'model_id': model_id, 'improvement': improvement, 'contributions': contributions}
-        #return model_id, improvement, contributions
-
 
 

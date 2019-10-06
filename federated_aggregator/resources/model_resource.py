@@ -22,6 +22,7 @@ link = api.model(name='Link', model={
     'data_owner_id': fields.String(required=True, description='DataOwner id')
 })
 
+
 @api.route('', endpoint='model_resources_ep')
 class ModelResources(Resource):
 
@@ -40,7 +41,7 @@ class ModelResources(Resource):
         return FederatedAggregator().get_models()
 
 
-@api.route('/<model_id>/accept', endpoint='model_resources_ep')
+@api.route('/<model_id>/accept', endpoint='model_resources_link_ep')
 class ModelResources(Resource):
 
     @api.doc('Register data owner with data for training')
