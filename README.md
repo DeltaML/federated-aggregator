@@ -27,7 +27,7 @@ git clone git@github.com:DeltaML/federated_aggregator.git
 cd federated_aggregator/
 python3 -m venv venv
 source venv/bin/activate
-pip install -r federated_aggregator/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Run
