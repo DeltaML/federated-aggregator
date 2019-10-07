@@ -120,11 +120,11 @@ class FederatedAggregator(metaclass=Singleton):
             logging.error(e)
             self.send_error_to_model_buyer(model_id)
 
-    def init_contract(self, model_id, model_buyer, trainers, validators):
+    def init_contract(self, model_id, model_buyer_addresss, trainers, validators):
         """
         Receives a data to add the participants in the smart contract and init new model to train
         :param model_id:
-        :param model_buyer:
+        :param model_buyer_addresss:
         :param trainers:
         :param validators:
         :return:
@@ -134,8 +134,8 @@ class FederatedAggregator(metaclass=Singleton):
         validators_address = [validator.address for validator in validators]
         [self.smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
         self.smart_contract.set_federated_aggregator(self.eth_address)
-        self.smart_contract.set_model_buyer(model_buyer.address)
-        self.smart_contract.new_model(model_id, validators_address, trainers_address, model_buyer.address)
+        self.smart_contract.set_model_buyer(model_buyer_addresss)
+        self.smart_contract.new_model(model_id, validators_address, trainers_address, model_buyer_addresss)
 
     def split_data_owners(self, linked_data_owners):
         """

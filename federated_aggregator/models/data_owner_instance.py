@@ -6,4 +6,4 @@ class DataOwnerInstance(object):
         self.port = data["port"]
 
     def __str__(self):
-        return str({"id": self.id, "host": self.host, "port": self.port})
+        return str({"id": self.id, "host": self.host, "port": self.port, "address": self.address})
