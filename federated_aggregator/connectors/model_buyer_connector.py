@@ -29,7 +29,16 @@ class ModelBuyerConnector:
         response = requests.patch(url, json=payload)
         response.raise_for_status()
         logging.info("Response {}".format(response))
-        return  response.json()
+        return response.json()
+
+    def send_mses(self, result):
+        url = "http://{}:{}/models/{}/mse".format(self.remote_address, self.model_buyer_port, result['model_id'])
+        payload = result
+        logging.info("url {} ".format(url))
+        response = requests.patch(url, json=payload)
+        response.raise_for_status()
+        logging.info("Response {}".format(response.json()))
+        return response.json()
 
     def send_encrypted_prediction(self, model, encrypted_prediction):
         """
