@@ -13,6 +13,7 @@ from commons.utils.singleton import Singleton
 from federated_aggregator.connectors.model_buyer_connector import ModelBuyerConnector
 from federated_aggregator.exceptions.exceptions import EmptyValidatorsException
 from federated_aggregator.models.global_model import GlobalModel
+from federated_aggregator.services.metrics_handler import MetricsHandler
 
 
 class FederatedAggregator(metaclass=Singleton):
@@ -102,16 +103,22 @@ class FederatedAggregator(metaclass=Singleton):
             model_data.local_trainers = local_trainers
             model_data.validators = validators
             logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
+
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
+            metrics_handler = MetricsHandler(diffs[0].size)
+            diffs, partial_diffs = metrics_handler.get_diffs(diffs, {})
             model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
-            mses = [np.mean(np.asarray(diff) ** 2) for diff in model_update['diffs']]
-            model_data.initial_mse = np.mean(mses)
-            model_data.decrypted_mse = model_data.initial_mse
-            self.data_owner_service.send_mses(validators, model_data, mses)
+            mse, mses, _ = metrics_handler.get_mses(model_update['diffs'], {})
+            logging.info("MSE: {}".format(mse))
+            model_data.decrypted_mse = mse
+            model_data.initial_mse = model_data.decrypted_mse
+            self.data_owner_service.send_mses(model_data.validators, model_data, mses)
+            result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, {}, metrics_handler.get_noise(), True)
+
             for i in range(1, self.n_iter + 1):
                 last_mse = model_data.decrypted_mse
-                model_data = self.training_cicle(model_data, i)
-                if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0:
+                model_data, result_ok = self.training_cicle(model_data, i)
+                if self.has_converged(model_data.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0 and result_ok:
                     logging.info("BREAKING")
                     break
             logging.info('Fished iterations for model {} {}'.format(model_id, model_data))
@@ -183,20 +190,26 @@ class FederatedAggregator(metaclass=Singleton):
                           for i in range(len(local_trainers))]
         model_data.model.weights, avg_gradient = self.update_model(model_data, gradients)
         logging.info("Done updating model")
+        result_ok = True
         if (i % self.n_iter_partial_res) == 0:
             logging.info("Calculating mses")
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
-            partial_diffs = self.data_owner_service.get_partial_model_metrics_from_validators(partial_models,
-                                                                                              model_data)
+            partial_diffs = self.data_owner_service.get_partial_model_metrics_from_validators(partial_models, model_data)
+            metrics_handler = MetricsHandler(diffs[0].size)
+            diffs, partial_diffs = metrics_handler.get_diffs(diffs, partial_diffs)
             logging.info("Sending partial results")
             model_update = self.send_partial_result_to_model_buyer(model_data, diffs, partial_diffs)
-            mses = [np.mean(np.asarray(diff) ** 2) for diff in model_update['diffs']]
-            model_data.decrypted_mse = np.mean(mses)
+            mse, mses, partial_mses = metrics_handler.get_mses(model_update['diffs'], model_update['partial_diffs'])
+            logging.info("MSE: {}".format(mse))
+            logging.info("Partial MSEs: {}".format(partial_mses))
+            model_data.decrypted_mse = mse
             model_data.mse = model_data.decrypted_mse
+            model_data.partial_MSEs = partial_mses
             self.data_owner_service.send_mses(model_data.validators, model_data, mses)
+            result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, partial_mses, metrics_handler.get_noise())
             model_data.model.weights = model_update['weights']
         self.data_owner_service.send_avg_gradient(avg_gradient, model_data)
-        return model_data
+        return model_data, result_ok
 
     def update_model(self, model_data, gradients):
         """
@@ -252,6 +265,17 @@ class FederatedAggregator(metaclass=Singleton):
         model_update = self.model_buyer_connector.send_partial_result(partial_result)
         model_update['weights'] = deserialize(model_update['weights'], self.encryption_service, model_data.public_key)
         return model_update
+
+    def send_mses_to_model_buyer(self, model_id, mse, partial_mses, noise, first_update=False):
+        message = {
+            'model_id': model_id,
+            'first_update': first_update,
+            'mse': mse,
+            'partial_mses': partial_mses,
+            'noise': noise
+        }
+        return self.model_buyer_connector.send_mses(message)['ok']
+
 
     def federated_learning_wrapper(self, data):
         return self.federated_learning_first_phase(data)
