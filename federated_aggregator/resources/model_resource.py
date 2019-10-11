@@ -46,6 +46,6 @@ class ModelResources(Resource):
 
     @api.doc('Register data owner with data for training')
     @api.marshal_with(link, code=200)
-    def post(self):
+    def post(self, model_id):
         data = request.get_json()
-        FederatedAggregator().link_data_owner_to_model(data['model_id'], data['data_owner_id'])
+        FederatedAggregator().link_data_owner_to_model(model_id, data['data_owner_id'])

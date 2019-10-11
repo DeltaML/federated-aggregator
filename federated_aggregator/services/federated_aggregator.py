@@ -48,9 +48,19 @@ class FederatedAggregator(metaclass=Singleton):
     def get_models(self):
         return list(self.global_models.values())
 
+    def federated_learning_wrapper(self, data):
+        return self.federated_learning_first_phase(data)
+
+    def federated_learning_wrapper2(self, model_id):
+        return self.federated_learning_second_phase(model_id)
+
     def process(self, remote_address, data):
         Thread(target=self.async_server_processing,
                args=self._build_async_processing_data(data, remote_address)).start()
+
+    def continue_process(self, model_id):
+        Thread(target=self.async_server_processing,
+               args=self._build_async_processing_data2(model_id)).start()
 
     @staticmethod
     def async_server_processing(func, *args):
@@ -61,6 +71,9 @@ class FederatedAggregator(metaclass=Singleton):
     def _build_async_processing_data(self, data, remote_address):
         data["remote_address"] = remote_address
         return self.federated_learning_wrapper, data
+
+    def _build_async_processing_data2(self, model_id):
+        return self.federated_learning_wrapper2, model_id
 
     def federated_learning_first_phase(self, data):
         model_id = data['model_id']
@@ -88,11 +101,11 @@ class FederatedAggregator(metaclass=Singleton):
 
     def link_data_owner_to_model(self, model_id, data_owner_id):
         linked_data_owners = self.global_models[model_id].data_owners
-        if linked_data_owners < self.config['MIN_DATA_OWNERS']:
-            if data_owner_id in self.data_owner_service.data_owners:
-                linked_data_owners.append(self.data_owner_service.data_owners[data_owner_id])
-        else:
-            self.federated_learning_second_phase(model_id)
+        if data_owner_id in self.data_owner_service.data_owners:
+            linked_data_owners.append(self.data_owner_service.data_owners[data_owner_id])
+            logging.info("Adding data owner to training, number {}".format(len(linked_data_owners)))
+        if len(linked_data_owners) >= self.config['MIN_DATA_OWNERS']:
+            self.continue_process(model_id)
 
     def federated_learning_second_phase(self, model_id):
         logging.info("Init federated_learning")
@@ -275,10 +288,6 @@ class FederatedAggregator(metaclass=Singleton):
             'noise': noise
         }
         return self.model_buyer_connector.send_mses(message)['ok']
-
-
-    def federated_learning_wrapper(self, data):
-        return self.federated_learning_first_phase(data)
 
     def federated_averaging(self, updates, model_data):
         """
