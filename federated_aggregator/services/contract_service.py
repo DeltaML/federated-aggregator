@@ -6,7 +6,8 @@ class ContractService:
 
     def __init__(self, w3_service, contract_address, fa_account):
         self.w3_service = w3_service
-        self.smart_contract = FederatedAggregatorContract(contract=w3_service.build_contract(address=contract_address))
+        self.smart_contract = FederatedAggregatorContract(contract=w3_service.build_contract(address=contract_address),
+                                                          address=fa_account)
         self.fa_account = fa_account
 
     def init_contract(self, global_model):
