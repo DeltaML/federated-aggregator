@@ -40,13 +40,20 @@ class DataOwnerConnector:
         results = self.async_thread_pool.run(executable=self._send_get_request_to_data_owner, args=args)
         return [result for result in results]
 
-    @optimized_collection_response(optimization=np.asarray, active=True)
     def send_requirements_to_data_owners(self, data_owners, data):
         args = [
             ("http://{}:{}/trainings".format(data_owner.host, self.data_owner_port), data)
             for data_owner in data_owners
         ]
-        results = self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
+        self.async_thread_pool.run(executable=self._send_post_request_to_data_owner, args=args)
+
+    @optimized_collection_response(optimization=np.asarray, active=True)
+    def get_linked_data_owners(self, data_owners, model_id):
+        args = [
+            "http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id)
+            for data_owner in data_owners
+        ]
+        results = self.async_thread_pool.run(executable=self._send_get_request_to_data_owner, args=args)
         return [result for result in results]
 
     def send_mses(self, validators, model_data, mses):

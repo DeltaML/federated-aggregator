@@ -48,9 +48,19 @@ class FederatedAggregator(metaclass=Singleton):
     def get_models(self):
         return list(self.global_models.values())
 
+    def federated_learning_wrapper(self, data):
+        return self.federated_learning_first_phase(data)
+
+    def federated_learning_wrapper2(self, model_id):
+        return self.federated_learning_second_phase(model_id)
+
     def process(self, remote_address, data):
         Thread(target=self.async_server_processing,
                args=self._build_async_processing_data(data, remote_address)).start()
+
+    def continue_process(self, model_id):
+        Thread(target=self.async_server_processing,
+               args=self._build_async_processing_data2(model_id)).start()
 
     @staticmethod
     def async_server_processing(func, *args):
@@ -62,13 +72,13 @@ class FederatedAggregator(metaclass=Singleton):
         data["remote_address"] = remote_address
         return self.federated_learning_wrapper, data
 
-    def federated_learning(self, data):
-        logging.info("Init federated_learning")
+    def _build_async_processing_data2(self, model_id):
+        return self.federated_learning_wrapper2, model_id
+
+    def federated_learning_first_phase(self, data):
         model_id = data['model_id']
         try:
-            linked_data_owners = self.data_owner_service.link_data_owners_to_model(data)
-            self.validate_linked_data_owners(linked_data_owners, model_id)
-            local_trainers, validators = self.split_data_owners(linked_data_owners)
+            self.data_owner_service.send_requirements(data)
             self.encryption_service.set_public_key(data["public_key"])
             model = self.initialize_global_model(data)
             self.global_models[model_id] = GlobalModel(model_id=model_id,
@@ -76,16 +86,36 @@ class FederatedAggregator(metaclass=Singleton):
                                                        buyer_host=data["remote_address"],
                                                        model_type=data['model_type'],
                                                        model_status=data["status"],
-                                                       local_trainers=local_trainers,
-                                                       validators=validators,
+                                                       data_owners=[],
+                                                       local_trainers=[],
+                                                       validators=[],
                                                        model=model,
                                                        initial_mse=None,
                                                        mse=None,
                                                        public_key=data["public_key"],
                                                        partial_MSEs=None,
                                                        step=data["step"])
-            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
+        except Exception as e:
+            logging.error(e)
+            self.send_error_to_model_buyer(model_id)
+
+    def link_data_owner_to_model(self, model_id, data_owner_id):
+        linked_data_owners = self.global_models[model_id].data_owners
+        if data_owner_id in self.data_owner_service.data_owners:
+            linked_data_owners.append(self.data_owner_service.data_owners[data_owner_id])
+            logging.info("Adding data owner to training, number {}".format(len(linked_data_owners)))
+        if len(linked_data_owners) >= self.config['MIN_DATA_OWNERS']:
+            self.continue_process(model_id)
+
+    def federated_learning_second_phase(self, model_id):
+        logging.info("Init federated_learning")
+        try:
             model_data = self.global_models[model_id]
+            self.validate_linked_data_owners(model_data.data_owners, model_id)
+            local_trainers, validators = self.split_data_owners(model_data.data_owners)
+            model_data.local_trainers = local_trainers
+            model_data.validators = validators
+            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
 
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
             metrics_handler = MetricsHandler(diffs[0].size)
@@ -259,10 +289,6 @@ class FederatedAggregator(metaclass=Singleton):
         }
         return self.model_buyer_connector.send_mses(message)['ok']
 
-
-    def federated_learning_wrapper(self, data):
-        return self.federated_learning(data)
-
     def federated_averaging(self, updates, model_data):
         """
         Sum all de partial updates and
@@ -318,7 +344,5 @@ class FederatedAggregator(metaclass=Singleton):
         for data_owner in partial_MSEs:
             contributions[data_owner] = (contributions[data_owner]) / contributions_sum
         return {'model_id': model_id, 'improvement': improvement, 'contributions': contributions}
-        #return model_id, improvement, contributions
-
 
 

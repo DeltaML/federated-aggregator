@@ -5,6 +5,7 @@ class GlobalModel:
                  model_id,
                  model_type,
                  model_status,
+                 data_owners,
                  local_trainers,
                  validators,
                  model,
@@ -20,6 +21,7 @@ class GlobalModel:
         :param model_id: String
         :param public_key: String
         :param model_type: String
+        :param data_owners: List[]
         :param local_trainers: List[]
         :param validators: List[]
         :param model: LinearRegression
@@ -29,6 +31,7 @@ class GlobalModel:
         self.buyer_host = buyer_host
         self.model_type = model_type
         self.model_status = model_status
+        self.data_owners = data_owners
         self.local_trainers = local_trainers
         self.validators = validators
         self.model = model
