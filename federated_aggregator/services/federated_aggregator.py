@@ -55,6 +55,19 @@ class FederatedAggregator(metaclass=Singleton):
     def get_models(self):
         return list(self.global_models.values())
 
+    def federated_learning_wrapper(self, data):
+        return self.federated_learning_first_phase(data)
+
+    def federated_learning_wrapper2(self, model_id):
+        return self.federated_learning_second_phase(model_id)
+
+    def _build_async_processing_data2(self, model_id):
+        return self.federated_learning_wrapper2, model_id
+
+    def continue_process(self, model_id):
+        Thread(target=self.async_server_processing,
+               args=self._build_async_processing_data2(model_id)).start()
+
     def process(self, remote_address, data):
         Thread(target=self.async_server_processing,
                args=self._build_async_processing_data(data, remote_address)).start()
@@ -69,88 +82,69 @@ class FederatedAggregator(metaclass=Singleton):
         data["remote_address"] = remote_address
         return self.federated_learning_wrapper, data
 
-    def federated_learning(self, data):
-        logging.info("Init federated_learning")
+    def federated_learning_first_phase(self, data):
         model_id = data['model_id']
         try:
-            global_model, validators = self.init_model_training(data, model_id)
-            global_model = self.iterate_model(global_model)
-            self.finish_model(global_model, model_id)
+            self.data_owner_service.send_requirements(data)
+            self.encryption_service.set_public_key(data["public_key"])
+            model = self.initialize_global_model(data)
+            self.global_models[model_id] = GlobalModel(model_id=model_id,
+                                                       model=model,
+                                                       model_buyer_data={'model_buyer_id': data["model_buyer_id"],
+                                                                         'model_buyer_host': data["remote_address"],
+                                                                         'model_buyer_address': data[
+                                                                             "model_buyer_address"]},
+                                                       model_type=data['model_type'],
+                                                       model_status=data["status"],
+                                                       payments_data=data["payments"],
+                                                       public_key=data["public_key"],
+                                                       step=data["step"])
+
         except Exception as e:
             logging.error(e)
             self.send_error_to_model_buyer(model_id)
 
-    def iterate_model(self, global_model):
-        """
-        Iterate model applying federated learning
-        :param global_model:
-        :return:
-        """
-        logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
-        diffs = self.data_owner_service.get_model_metrics_from_validators(global_model)
-        metrics_handler = MetricsHandler(diffs[0].size)
-        diffs, partial_diffs = metrics_handler.get_diffs(diffs)
-        model_update = self.send_partial_result_to_model_buyer(global_model, diffs)
-        mse, mses, _ = metrics_handler.get_mses(model_update['diffs'])
-        global_model.decrypted_mse = mse
-        global_model.initial_mse = mse
-        self.data_owner_service.send_mses(global_model.validators, global_model, mses)
-        result_ok = self.send_mses_to_model_buyer(global_model.model_id, mse, {}, metrics_handler.get_noise(), True)
-        for i in range(1, self.n_iter + 1):
-            last_mse = global_model.decrypted_mse
-            global_model = self.training_cicle(global_model, i)
-            if self.has_converged(global_model.decrypted_mse, last_mse) and (i % self.n_iter_partial_res) == 0 and result_ok:
-                logging.info("BREAKING")
-                break
-        return global_model
+    def federated_learning_second_phase(self, model_id):
+        logging.info("Init federated_learning")
+        try:
+            model_data = self.global_models[model_id]
+            self.contract_service.init_contract(model_data)
+            self.validate_linked_data_owners(model_data.data_owners, model_id)
+            local_trainers, validators = self.split_data_owners(model_data.data_owners)
+            model_data.local_trainers = local_trainers
+            model_data.validators = validators
+            logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
 
-    def init_model_training(self, data, model_id):
-        """
-        Init model for training
-        :param data:
-        :param model_id:
-        :return:
-        """
-        logging.info("Init model training for model {}".format(model_id))
-        # TODO: se debería enviar informacion de los pagos?
-        linked_data_owners = self.data_owner_service.link_data_owners_to_model(data)
-        self.validate_linked_data_owners(linked_data_owners, model_id)
-        local_trainers, validators = self.split_data_owners(linked_data_owners)
-        self.encryption_service.set_public_key(data["public_key"])
-        model = self.initialize_global_model(data)
-        global_model = GlobalModel(model_id=model_id,
-                                   local_trainers=local_trainers,
-                                   validators=validators,
-                                   model=model,
-                                   model_buyer_data={'model_buyer_id': data["model_buyer_id"],
-                                                     'model_buyer_host': data["remote_address"],
-                                                     'model_buyer_address': data["model_buyer_address"]},
-                                   model_type=data['model_type'],
-                                   model_status=data["status"],
-                                   payments_data=data["payments"],
-                                   public_key=data["public_key"],
-                                   step=data["step"])
-        self.global_models[model_id] = global_model
-        # Init smart contract
-        self.contract_service.init_contract(global_model)
-        return global_model, validators
+            diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
+            metrics_handler = MetricsHandler(diffs[0].size)
+            diffs, partial_diffs = metrics_handler.get_diffs(diffs, {})
+            model_update = self.send_partial_result_to_model_buyer(model_data, diffs, {}, True)
+            mse, mses, _ = metrics_handler.get_mses(model_update['diffs'], {})
+            logging.info("MSE: {}".format(mse))
+            model_data.decrypted_mse = mse
+            model_data.initial_mse = model_data.decrypted_mse
+            self.data_owner_service.send_mses(model_data.validators, model_data, mses)
+            result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, {}, metrics_handler.get_noise(), True)
 
-    def finish_model(self, global_model, model_id):
-        """
-        Execute finish model tasks
-        :param global_model:
-        :param model_id:
-        :return:
-        """
-        logging.info('Fished iterations for model {} {}'.format(model_id, global_model))
-        model_buyer_data = {
-            'model': {
-                "status": "FINISHED",
-                'weights': serialize(global_model.model.weights, self.encryption_service, global_model.public_key),
-                'id': global_model.model_id
+            for i in range(1, self.n_iter + 1):
+                last_mse = model_data.decrypted_mse
+                model_data, result_ok = self.training_cicle(model_data, i)
+                if self.has_converged(model_data.decrypted_mse, last_mse) and (
+                        i % self.n_iter_partial_res) == 0 and result_ok:
+                    logging.info("BREAKING")
+                    break
+            logging.info('Fished iterations for model {} {}'.format(model_id, model_data))
+            model_buyer_data = {
+                'model': {
+                    "status": "FINISHED",
+                    'weights': serialize(model_data.model.weights, self.encryption_service, model_data.public_key),
+                    'id': model_data.model_id
+                }
             }
-        }
-        self.model_buyer_connector.send_result(model_buyer_data)
+            self.model_buyer_connector.send_result(model_buyer_data)
+        except Exception as e:
+            logging.error(e)
+            self.send_error_to_model_buyer(model_id)
 
     def split_data_owners(self, linked_data_owners):
         """
@@ -211,7 +205,8 @@ class FederatedAggregator(metaclass=Singleton):
         if (i % self.n_iter_partial_res) == 0:
             logging.info("Calculating mses")
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
-            partial_diffs = self.data_owner_service.get_partial_model_metrics_from_validators(partial_models, model_data)
+            partial_diffs = self.data_owner_service.get_partial_model_metrics_from_validators(partial_models,
+                                                                                              model_data)
             metrics_handler = MetricsHandler(diffs[0].size)
             diffs, partial_diffs = metrics_handler.get_diffs(diffs, partial_diffs)
             logging.info("Sending partial results")
@@ -223,7 +218,8 @@ class FederatedAggregator(metaclass=Singleton):
             model_data.mse = model_data.decrypted_mse
             model_data.partial_MSEs = partial_mses
             self.data_owner_service.send_mses(model_data.validators, model_data, mses)
-            result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, partial_mses, metrics_handler.get_noise())
+            result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, partial_mses,
+                                                      metrics_handler.get_noise())
             model_data.model.weights = model_update['weights']
         self.data_owner_service.send_avg_gradient(avg_gradient, model_data)
         return model_data, result_ok
@@ -293,10 +289,6 @@ class FederatedAggregator(metaclass=Singleton):
         }
         return self.model_buyer_connector.send_mses(message)['ok']
 
-
-    def federated_learning_wrapper(self, data):
-        return self.federated_learning(data)
-
     def federated_averaging(self, updates, model_data):
         """
         Sum all de partial updates and
@@ -358,3 +350,11 @@ class FederatedAggregator(metaclass=Singleton):
         """
         model = self.global_models[encrypted_prediction["model_id"]]
         self.data_owner_service.send_encrypted_prediction(model=model, encrypted_prediction=encrypted_prediction)
+
+    def link_data_owner_to_model(self, model_id, data_owner_id):
+        linked_data_owners = self.global_models[model_id].data_owners
+        if data_owner_id in self.data_owner_service.data_owners:
+            linked_data_owners.append(self.data_owner_service.data_owners[data_owner_id])
+            logging.info("Adding data owner to training, number {}".format(len(linked_data_owners)))
+        if len(linked_data_owners) >= self.config['MIN_DATA_OWNERS']:
+            self.continue_process(model_id)

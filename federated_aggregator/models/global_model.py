@@ -25,12 +25,13 @@ class GlobalModel:
                  model_id,
                  model_type,
                  model_status,
-                 local_trainers,
-                 validators,
                  model,
                  public_key,
                  step,
                  payments_data,
+                 data_owners=[],
+                 local_trainers=[],
+                 validators=[],
                  partial_MSEs=None,
                  initial_mse=DEFAULT_INITIAL_MSE,
                  mse=None
@@ -42,6 +43,7 @@ class GlobalModel:
         :param model_id: String
         :param public_key: String
         :param model_type: String
+        :param data_owners: List[]
         :param local_trainers: List[]
         :param validators: List[]
         :param model: LinearRegression
@@ -50,6 +52,7 @@ class GlobalModel:
         self.model_buyer = ModelBuyer(model_buyer_data)
         self.model_type = model_type
         self.model_status = model_status
+        self.data_owners = data_owners
         self.local_trainers = local_trainers
         self.validators = validators
         self.model = model
