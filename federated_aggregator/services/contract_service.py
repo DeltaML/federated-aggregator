@@ -37,6 +37,8 @@ class ContractService:
         :param iteration:
         :return:
         """
+
+        logging.info("save_mse contract")
         self.smart_contract.save_mse(model_id, mse, iteration)
 
     def save_partial_mse(self, model_id, mse, trainer, iteration):
@@ -48,4 +50,5 @@ class ContractService:
         :param iteration:
         :return:
         """
+        logging.info("save_partial_mse contract")
         self.smart_contract.save_partial_mse(model_id, mse, trainer, iteration)

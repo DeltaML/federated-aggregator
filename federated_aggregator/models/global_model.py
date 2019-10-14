@@ -18,6 +18,8 @@ class PaymentsData:
 
 
 class GlobalModel:
+    DEFAULT_INITIAL_MSE = 1000
+
     def __init__(self,
                  model_buyer_data,
                  model_id,
@@ -30,7 +32,7 @@ class GlobalModel:
                  step,
                  payments_data,
                  partial_MSEs=None,
-                 initial_mse=None,
+                 initial_mse=DEFAULT_INITIAL_MSE,
                  mse=None
                  ):
         """
