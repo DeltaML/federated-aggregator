@@ -155,7 +155,6 @@ class FederatedAggregator(metaclass=Singleton):
                 model_data.partial_MSEs[trainer.id],
                 trainer.address,
                 1)
-        self.contract_service.calculate_contributions(model_data.model_id)
 
     def split_data_owners(self, linked_data_owners):
         """

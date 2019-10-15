@@ -52,12 +52,3 @@ class ContractService:
         """
         logging.info("save_partial_mse contract")
         self.smart_contract.save_partial_mse(model_id, mse, trainer, iteration)
-
-    def calculate_contributions(self, model_id):
-        """
-
-        :param model_id:
-        :return:
-        """
-        logging.info("calculate_contributions contract")
-        self.smart_contract.calculate_contributions(model_id)
