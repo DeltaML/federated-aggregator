@@ -141,10 +141,21 @@ class FederatedAggregator(metaclass=Singleton):
                     'id': model_data.model_id
                 }
             }
+            self.update_contract_state(model_data)
             self.model_buyer_connector.send_result(model_buyer_data)
         except Exception as e:
             logging.error(e)
             self.send_error_to_model_buyer(model_id)
+
+    def update_contract_state(self, model_data):
+        self.contract_service.save_mse(model_data.model_id, model_data.decrypted_mse, 1)
+        for trainer in model_data.local_trainers:
+            self.contract_service.save_partial_mse(
+                model_data.model_id,
+                model_data.partial_MSEs[trainer.id],
+                trainer.address,
+                1)
+        self.contract_service.calculate_contributions(model_data.model_id)
 
     def split_data_owners(self, linked_data_owners):
         """
