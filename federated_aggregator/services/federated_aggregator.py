@@ -108,13 +108,12 @@ class FederatedAggregator(metaclass=Singleton):
         logging.info("Init federated_learning")
         try:
             model_data = self.global_models[model_id]
-            self.contract_service.init_contract(model_data)
             self.validate_linked_data_owners(model_data.data_owners, model_id)
             local_trainers, validators = self.split_data_owners(model_data.data_owners)
             model_data.local_trainers = local_trainers
             model_data.validators = validators
             logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
-
+            self.contract_service.init_contract(model_data)
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
             metrics_handler = MetricsHandler(diffs[0].size)
             diffs, partial_diffs = metrics_handler.get_diffs(diffs, {})

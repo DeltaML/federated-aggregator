@@ -22,7 +22,7 @@ class ContractService:
         # Add actors
         [self.smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
         self.smart_contract.set_federated_aggregator(self.fa_account)
-        #self.smart_contract.set_model_buyer(global_model.model_buyer.address)
+        self.smart_contract.set_model_buyer(global_model.model_buyer.address)
         # Create model into smart contract
         self.smart_contract.new_model(global_model.model_id, validators_address, trainers_address,
                                       global_model.model_buyer.address)
