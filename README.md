@@ -27,7 +27,7 @@ git clone git@github.com:DeltaML/federated_aggregator.git
 cd federated_aggregator/
 python3 -m venv venv
 source venv/bin/activate
-pip install -r federated_aggregator/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Run
@@ -40,8 +40,8 @@ pip install -r federated_aggregator/requirements.txt
 
 ### Using Docker
 ``` bash
-    docker build -t federated-learning-federated-trainer --rm -f federated-trainer/Dockerfile
-    docker run --rm -it -p 8080:8080federated-learning-federated-trainer
+    docker build -t federated_aggregator --rm -f federated_aggregator/Dockerfile
+    docker run --rm -it -p 8080:8080 federated_aggregator
 ``` 
 
 

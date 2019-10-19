@@ -1,5 +1,6 @@
 class ExceptionMessageConstants:
-    EMPTY_VALIDATORS = "Not found validators in training"
+    EMPTY_VALIDATORS = "Not found validators in training {}"
+    INVALID_ABI_FORMAT = "Abi {} haven't valid format"
 
 
 class FederatedTrainerException(Exception):
@@ -13,4 +14,4 @@ class FederatedTrainerException(Exception):
 
 class EmptyValidatorsException(FederatedTrainerException):
     def __init__(self, data):
-        super().__init__("{} {}".format(ExceptionMessageConstants.EMPTY_VALIDATORS, data))
+        super().__init__(ExceptionMessageConstants.EMPTY_VALIDATORS.format(data))

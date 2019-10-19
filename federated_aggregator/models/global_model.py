@@ -1,19 +1,41 @@
+
+class ModelBuyer:
+    def __init__(self, data):
+        self.id = data["model_buyer_id"]
+        self.host = data["model_buyer_host"]
+        self.address = data["model_buyer_address"]
+
+
+class Payment:
+    def __init__(self, data):
+        self.unit = data["unit"]
+        self.value = data["value"]
+
+
+class PaymentsData:
+    def __init__(self, data):
+        self.pay_for_model = Payment(data["pay_for_model"])
+
+
 class GlobalModel:
+    DEFAULT_INITIAL_MSE = 1000
+
     def __init__(self,
-                 buyer_id,
-                 buyer_host,
+                 model_buyer_data,
                  model_id,
                  model_type,
                  model_status,
-                 data_owners,
-                 local_trainers,
-                 validators,
                  model,
-                 initial_mse,
-                 mse,
                  public_key,
-                 partial_MSEs,
-                 step):
+                 step,
+                 payments_data,
+                 data_owners=[],
+                 local_trainers=[],
+                 validators=[],
+                 partial_MSEs=None,
+                 initial_mse=DEFAULT_INITIAL_MSE,
+                 mse=None
+                 ):
         """
 
         :param buyer_id: String
@@ -26,9 +48,8 @@ class GlobalModel:
         :param validators: List[]
         :param model: LinearRegression
         """
-        self.buyer_id = buyer_id
         self.model_id = model_id
-        self.buyer_host = buyer_host
+        self.model_buyer = ModelBuyer(model_buyer_data)
         self.model_type = model_type
         self.model_status = model_status
         self.data_owners = data_owners
@@ -39,5 +60,7 @@ class GlobalModel:
         self.mse = mse
         self.partial_MSEs = partial_MSEs
         self.public_key = public_key
-        self.decrypted_mse = None
         self.gradient_step = step
+        self.payments_data = PaymentsData(payments_data)
+        self.decrypted_mse = None
+

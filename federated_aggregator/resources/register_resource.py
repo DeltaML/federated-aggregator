@@ -8,7 +8,8 @@ api = Namespace('dataowner', description='Data Owner related operations')
 
 
 data_owner_register = api.model(name='Register', model={
-    'id': fields.String(required=True, description='Data owner subscription id')
+    'id': fields.String(required=True, description='Data owner subscription id'),
+    'address': fields.String(required=True, description='Data owner eth address'),
 })
 
 
