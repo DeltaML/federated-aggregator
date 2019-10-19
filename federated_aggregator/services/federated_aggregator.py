@@ -108,13 +108,12 @@ class FederatedAggregator(metaclass=Singleton):
         logging.info("Init federated_learning")
         try:
             model_data = self.global_models[model_id]
-            self.contract_service.init_contract(model_data)
             self.validate_linked_data_owners(model_data.data_owners, model_id)
             local_trainers, validators = self.split_data_owners(model_data.data_owners)
             model_data.local_trainers = local_trainers
             model_data.validators = validators
             logging.info('Running distributed gradient aggregation for {:d} iterations'.format(self.n_iter))
-
+            self.contract_service.init_contract(model_data)
             diffs = self.data_owner_service.get_model_metrics_from_validators(model_data)
             metrics_handler = MetricsHandler(diffs[0].size)
             diffs, partial_diffs = metrics_handler.get_diffs(diffs, {})
@@ -125,7 +124,7 @@ class FederatedAggregator(metaclass=Singleton):
             model_data.initial_mse = model_data.decrypted_mse
             self.data_owner_service.send_mses(model_data.validators, model_data, mses)
             result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, {}, metrics_handler.get_noise(), True)
-
+            self.contract_service.save_mse(model_data.model_id, model_data.decrypted_mse, 0)
             for i in range(1, self.n_iter + 1):
                 last_mse = model_data.decrypted_mse
                 model_data, result_ok = self.training_cicle(model_data, i)
@@ -141,10 +140,20 @@ class FederatedAggregator(metaclass=Singleton):
                     'id': model_data.model_id
                 }
             }
+            self.update_contract_state(model_data)
             self.model_buyer_connector.send_result(model_buyer_data)
         except Exception as e:
             logging.error(e)
             self.send_error_to_model_buyer(model_id)
+
+    def update_contract_state(self, model_data):
+        self.contract_service.save_mse(model_data.model_id, model_data.decrypted_mse, 1)
+        for trainer in model_data.local_trainers:
+            self.contract_service.save_partial_mse(
+                model_data.model_id,
+                model_data.partial_MSEs[trainer.id],
+                trainer.address,
+                1)
 
     def split_data_owners(self, linked_data_owners):
         """
