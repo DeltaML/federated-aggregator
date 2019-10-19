@@ -22,7 +22,7 @@ class ContractService:
         # Add actors
         [self.smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
         self.smart_contract.set_federated_aggregator(self.fa_account)
-        #self.smart_contract.set_model_buyer(global_model.model_buyer.address)
+        self.smart_contract.set_model_buyer(global_model.model_buyer.address)
         # Create model into smart contract
         self.smart_contract.new_model(global_model.model_id, validators_address, trainers_address,
                                       global_model.model_buyer.address)
@@ -39,7 +39,7 @@ class ContractService:
         """
 
         logging.info("save_mse contract")
-        self.smart_contract.save_mse(model_id, mse, iteration)
+        self.smart_contract.save_mse(model_id, int(mse), iteration)
 
     def save_partial_mse(self, model_id, mse, trainer, iteration):
         """
@@ -51,4 +51,5 @@ class ContractService:
         :return:
         """
         logging.info("save_partial_mse contract")
-        self.smart_contract.save_partial_mse(model_id, mse, trainer, iteration)
+        logging.info("Saving partial_mse model_id:{}, mse:{}, trainer_addr:{}, iter:{}".format(model_id, int(mse), trainer, iteration))
+        self.smart_contract.save_partial_mse(model_id, int(mse), trainer, iteration)
