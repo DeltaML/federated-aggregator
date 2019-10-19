@@ -124,7 +124,7 @@ class FederatedAggregator(metaclass=Singleton):
             model_data.initial_mse = model_data.decrypted_mse
             self.data_owner_service.send_mses(model_data.validators, model_data, mses)
             result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, {}, metrics_handler.get_noise(), True)
-
+            self.contract_service.save_mse(model_data.model_id, model_data.decrypted_mse, 0)
             for i in range(1, self.n_iter + 1):
                 last_mse = model_data.decrypted_mse
                 model_data, result_ok = self.training_cicle(model_data, i)
