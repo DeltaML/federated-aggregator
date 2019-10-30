@@ -1,12 +1,12 @@
 # ---- Base ----
 # ---- Python ----
-FROM python:3 AS build
+FROM python:3.6 AS build
 MAINTAINER "DeltaML dev@deltaml.com"
 COPY requirements.txt .
 # install app dependencies
 RUN pip install  --user -r requirements.txt
 
-FROM python:stretch AS release
+FROM python:3.6-stretch AS release
 WORKDIR /app
 COPY --from=build /root/.local /root/.local
 ADD /federated_aggregator /app/federated_aggregator
