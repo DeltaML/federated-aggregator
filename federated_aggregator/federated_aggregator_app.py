@@ -8,6 +8,7 @@ from flask import Flask
 
 from federated_aggregator.config.logging_config import PROD_LOGGING_CONFIG, DEV_LOGGING_CONFIG
 from federated_aggregator.resources import api
+from federated_aggregator.services.contract_service import ContractService
 from federated_aggregator.services.data_owner_service import DataOwnerService
 from federated_aggregator.services.federated_aggregator import FederatedAggregator
 
@@ -35,12 +36,15 @@ app = create_app()
 api.init_app(app)
 encryption_service = EncryptionService(is_active=app.config["ACTIVE_ENCRYPTION"])
 data_owner_service = DataOwnerService()
-w3_service = Web3Service(app.config["ETH_URL"])
+
+contract_service = ContractService()
+contract_service.init(app.config)
+
 federated_aggregator = FederatedAggregator()
 data_owner_service.init(encryption_service, app.config)
 federated_aggregator.init(encryption_service=encryption_service,
                           data_owner_service=data_owner_service,
-                          w3_service=w3_service,
+                          contract_service=contract_service,
                           config=app.config)
 
 logging.info("federated_aggregator running")

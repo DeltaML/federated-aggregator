@@ -5,6 +5,7 @@ from federated_aggregator.resources.register_resource import api as register_api
 from federated_aggregator.resources.model_resource import api as model_api
 from federated_aggregator.resources.contributions_resource import api as contributions_api
 from federated_aggregator.resources.helper_resources import api as helper_api
+from federated_aggregator.resources.contract_resource import api as contract_api
 
 api = Api(
     title='Federated Aggregator Api',
@@ -19,6 +20,7 @@ api.add_namespace(register_api)
 api.add_namespace(model_api)
 api.add_namespace(contributions_api)
 api.add_namespace(helper_api)
+api.add_namespace(contract_api)
 
 
 @api.errorhandler(Exception)
