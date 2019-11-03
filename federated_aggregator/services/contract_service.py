@@ -1,14 +1,38 @@
 import logging
+
+from commons.utils.singleton import Singleton
 from commons.web3.delta_contracts import FederatedAggregatorContract
+from commons.web3.web3_service import Web3Service
 
 
-class ContractService:
+class ContractService(metaclass=Singleton):
 
-    def __init__(self, w3_service, contract_address, fa_account):
-        self.w3_service = w3_service
-        self.smart_contract = FederatedAggregatorContract(contract=w3_service.build_contract(address=contract_address),
-                                                          address=fa_account)
-        self.fa_account = fa_account
+    def __init__(self):
+        self.w3_service = None
+        self.default_contract_address = None
+        self.contract_address = None
+        self.fa_account = None
+
+    def init(self, config):
+        self.w3_service = Web3Service(config["ETH_URL"])
+        self.default_contract_address = config["CONTRACT_ADDRESS"]
+        self.fa_account = config["FEDERATED_AGGREGATOR_ADDRESS"]
+        self.contract_address = self.default_contract_address
+
+    def set_contract_address(self, address):
+        self.contract_address = address
+
+    def get_contract_data(self):
+        return {'address': self.contract_address}
+
+    def build_contract_api(self):
+        """
+
+        :param account:
+        :return:
+        """
+        return FederatedAggregatorContract(contract=self.w3_service.build_contract(address=self.contract_address),
+                                           address=self.fa_account)
 
     def init_contract(self, global_model):
         """
@@ -20,14 +44,15 @@ class ContractService:
         trainers_address = [trainer.address for trainer in global_model.local_trainers]
         validators_address = [validator.address for validator in global_model.validators]
         # Add actors
-        [self.smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
-        self.smart_contract.set_federated_aggregator(self.fa_account)
-        self.smart_contract.set_model_buyer(global_model.model_buyer.address)
+        smart_contract = self.build_contract_api()
+        [smart_contract.set_data_owner(do_address) for do_address in (trainers_address + validators_address)]
+        smart_contract.set_federated_aggregator(self.fa_account)
+        smart_contract.set_model_buyer(global_model.model_buyer.address)
         # Create model into smart contract
-        self.smart_contract.new_model(global_model.model_id, validators_address, trainers_address,
-                                      global_model.model_buyer.address)
+        smart_contract.new_model(global_model.model_id, validators_address, trainers_address,
+                                 global_model.model_buyer.address)
         # Save initial mse
-        self.smart_contract.save_mse(global_model.model_id, global_model.initial_mse, 0)
+        smart_contract.save_mse(global_model.model_id, global_model.initial_mse, 0)
 
     def save_mse(self, model_id, mse, iteration):
         """
@@ -39,7 +64,7 @@ class ContractService:
         """
 
         logging.info("save_mse contract")
-        self.smart_contract.save_mse(model_id, int(mse), iteration)
+        self.build_contract_api().save_mse(model_id, int(mse), iteration)
 
     def save_partial_mse(self, model_id, mse, trainer, iteration):
         """
@@ -50,6 +75,7 @@ class ContractService:
         :param iteration:
         :return:
         """
-        logging.info("save_partial_mse contract")
-        logging.info("Saving partial_mse model_id:{}, mse:{}, trainer_addr:{}, iter:{}".format(model_id, int(mse), trainer, iteration))
-        self.smart_contract.save_partial_mse(model_id, int(mse), trainer, iteration)
+        logging.info(
+            "Saving partial_mse model_id:{}, mse:{}, trainer_addr:{}, iter:{}".format(model_id, int(mse), trainer,
+                                                                                      iteration))
+        self.build_contract_api().save_partial_mse(model_id, int(mse), trainer, iteration)

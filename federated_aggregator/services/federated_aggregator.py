@@ -31,7 +31,7 @@ class FederatedAggregator(metaclass=Singleton):
         self.n_iter = None
         self.n_iter_partial_res = None
 
-    def init(self, encryption_service, data_owner_service, w3_service, config):
+    def init(self, encryption_service, data_owner_service, contract_service, config):
         """
         :param w3_service:
         :param data_owner_service:
@@ -42,9 +42,7 @@ class FederatedAggregator(metaclass=Singleton):
         self.encryption_service = encryption_service
         self.data_owner_service = data_owner_service
         self.eth_address = self.config["FEDERATED_AGGREGATOR_ADDRESS"]
-        self.contract_service = ContractService(w3_service=w3_service,
-                                                contract_address=self.config["CONTRACT_ADDRESS"],
-                                                fa_account=self.eth_address)
+        self.contract_service = contract_service
         self.active_encryption = self.config["ACTIVE_ENCRYPTION"]
         self.model_buyer_connector = ModelBuyerConnector(self.config["MODEL_BUYER_HOST"],
                                                          self.config["MODEL_BUYER_PORT"])
