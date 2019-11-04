@@ -32,4 +32,3 @@ class ContractResources(Resource):
     def get(self):
         logging.info("Get contract address")
         return ContractService().get_contract_data(), 200
-

@@ -25,6 +25,12 @@ class ContractService(metaclass=Singleton):
     def get_contract_data(self):
         return {'address': self.contract_address}
 
+    def set_federated_aggregator_address(self, address):
+        self.fa_account = address
+
+    def get_federated_aggregator_address(self):
+        return {'address': self.fa_account}
+
     def build_contract_api(self):
         """
 
