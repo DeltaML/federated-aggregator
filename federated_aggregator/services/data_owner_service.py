@@ -61,8 +61,8 @@ class DataOwnerService(metaclass=Singleton):
                 linked_data_owners.append(self.data_owners[data_owner_key])
         return linked_data_owners
 
-    def send_mses(self, validators, model_data, mses):
-        self.data_owner_connector.send_mses(validators, model_data, mses)
+    def send_mses(self, validators, model_data, mses, role):
+        self.data_owner_connector.send_mses(validators, model_data, mses, role)
 
     def send_avg_gradient(self, gradient, model_data):
         """
@@ -112,3 +112,6 @@ class DataOwnerService(metaclass=Singleton):
         logging.info("send_encrypted_prediction")
         self.data_owner_connector.send_encrypted_prediction(data_owner=model.data_owner,
                                                             encrypted_prediction=encrypted_prediction)
+
+    def send_result(self):
+        self.data_owner_connector.sen

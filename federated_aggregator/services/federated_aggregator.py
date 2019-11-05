@@ -118,7 +118,8 @@ class FederatedAggregator(metaclass=Singleton):
             logging.info("MSE: {}".format(mse))
             model_data.decrypted_mse = mse
             model_data.initial_mse = model_data.decrypted_mse
-            self.data_owner_service.send_mses(model_data.validators, model_data, mses)
+            self.data_owner_service.send_mses(model_data.validators, model_data, mses, 'validator')
+            self.data_owner_service.send_mses(model_data.local_trainers, model_data, [mse] * len(model_data.local_trainers), 'trainer')
             result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, {}, metrics_handler.get_noise(), True)
             self.contract_service.save_mse(model_data.model_id, model_data.decrypted_mse, 0)
             for i in range(1, self.n_iter + 1):
@@ -222,7 +223,8 @@ class FederatedAggregator(metaclass=Singleton):
             model_data.decrypted_mse = mse
             model_data.mse = model_data.decrypted_mse
             model_data.partial_MSEs = partial_mses
-            self.data_owner_service.send_mses(model_data.validators, model_data, mses)
+            self.data_owner_service.send_mses(model_data.validators, model_data, mses, 'validator')
+            self.data_owner_service.send_mses(model_data.local_trainers, model_data, [mse] * len(model_data.local_trainers), 'trainer')
             result_ok = self.send_mses_to_model_buyer(model_data.model_id, mse, partial_mses,
                                                       metrics_handler.get_noise())
             model_data.model.weights = model_update['weights']
@@ -363,3 +365,10 @@ class FederatedAggregator(metaclass=Singleton):
             logging.info("Adding data owner to training, number {}".format(len(linked_data_owners)))
         if len(linked_data_owners) >= self.config['MIN_DATA_OWNERS']:
             self.continue_process(model_id)
+
+    def send_result_to_data_owners(self, model_id, model_data):
+        initial_mse = model_data.initial_mse
+        mse = model_data.mse
+        partial_MSEs = model_data.partial_MSEs
+        contribs = self.calculate_contributions(model_id, mse, initial_mse, partial_MSEs)
+        self.data_owner_service.send_result(model_id, contribs)
