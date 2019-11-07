@@ -138,6 +138,7 @@ class FederatedAggregator(metaclass=Singleton):
                 }
             }
             self.update_contract_state(model_data)
+            self.send_result_to_data_owners(model_id, model_data)
             self.model_buyer_connector.send_result(model_buyer_data)
         except Exception as e:
             logging.error(e)
@@ -371,4 +372,4 @@ class FederatedAggregator(metaclass=Singleton):
         mse = model_data.mse
         partial_MSEs = model_data.partial_MSEs
         contribs = self.calculate_contributions(model_id, mse, initial_mse, partial_MSEs)
-        self.data_owner_service.send_result(model_id, contribs)
+        self.data_owner_service.send_result(model_id, contribs, model_data.data_owners)

@@ -110,7 +110,7 @@ class DataOwnerConnector:
 
     def send_result_to_data_owners(self, model_id, contribs, data_owners):
         args = [
-            ("http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id), contribs)
+            ("http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id), {'contribs': contribs})
             for data_owner in data_owners
         ]
         self.async_thread_pool.run(executable=self._send_patch_request_to_data_owner, args=args)

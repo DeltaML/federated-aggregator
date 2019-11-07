@@ -113,5 +113,5 @@ class DataOwnerService(metaclass=Singleton):
         self.data_owner_connector.send_encrypted_prediction(data_owner=model.data_owner,
                                                             encrypted_prediction=encrypted_prediction)
 
-    def send_result(self):
-        self.data_owner_connector.sen
+    def send_result(self, model_id, contribs, data_owners):
+        self.data_owner_connector.send_result_to_data_owners(model_id, contribs, data_owners)
