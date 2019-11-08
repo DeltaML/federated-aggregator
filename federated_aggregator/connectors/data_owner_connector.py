@@ -56,10 +56,10 @@ class DataOwnerConnector:
         results = self.async_thread_pool.run(executable=self._send_get_request_to_data_owner, args=args)
         return [result for result in results]
 
-    def send_mses(self, validators, model_data, mses):
+    def send_mses(self, validators, model_data, mses, role):
         args = [
             (
-            "http://{}:{}/trainings/{}/metrics".format(validators[i].host, self.data_owner_port, model_data.model_id), {'mse': mses[i]})
+            "http://{}:{}/trainings/{}/metrics".format(validators[i].host, self.data_owner_port, model_data.model_id), {'mse': mses[i], 'role': role})
             for i in range(len(validators))
         ]
         self.async_thread_pool.run(executable=self._send_put_request_to_data_owner, args=args)
@@ -108,6 +108,13 @@ class DataOwnerConnector:
         response.raise_for_status()
         logging.info("response {}".format(response))
 
+    def send_result_to_data_owners(self, model_id, contribs, data_owners):
+        args = [
+            ("http://{}:{}/trainings/{}".format(data_owner.host, self.data_owner_port, model_id), {'contribs': contribs})
+            for data_owner in data_owners
+        ]
+        self.async_thread_pool.run(executable=self._send_patch_request_to_data_owner, args=args)
+
     @deserialize_encrypted_server_data_2()
     def _send_get_request_to_data_owner(self, url):
         logging.info("Url: {} ".format(url))
@@ -134,6 +141,15 @@ class DataOwnerConnector:
         url, payload = data
         logging.info("Url: {} ".format(url))
         response = requests.put(url, json=payload, timeout=None)
+        response.raise_for_status()
+        logging.info("Response: {} ".format(response))
+        return response.json()
+
+    @staticmethod
+    def _send_patch_request_to_data_owner(data):
+        url, payload = data
+        logging.info("Url: {} ".format(url))
+        response = requests.patch(url, json=payload, timeout=None)
         response.raise_for_status()
         logging.info("Response: {} ".format(response))
         return response.json()
