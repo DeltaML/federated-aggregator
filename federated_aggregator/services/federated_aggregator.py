@@ -93,6 +93,7 @@ class FederatedAggregator(metaclass=Singleton):
                                                        model_type=data['model_type'],
                                                        model_status=data["status"],
                                                        payments_data=data["payments"],
+                                                       data_owners=[],
                                                        public_key=data["public_key"],
                                                        step=data["step"])
 
