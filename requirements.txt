@@ -1,4 +1,4 @@
-codecov==2.0.15
+codecov==2.0.16
 coverage==4.4.2
 flask==1.0.3
 flask-cors==3.0.8
